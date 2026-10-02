@@ -5865,3 +5865,104 @@ two side by side.
 
 - `dotnet test` — **919/919 passing** (13 new: what groups, what does not, order held across the
   switch, the incremental rule agreeing with `Arrange`, and the badge).
+
+---
+
+## Fix — RAW frames shot in portrait were drawn on their side 🐞
+
+Noticed while verifying the stacking work: with a CR2 and its JPEG side by side, the JPEG stood
+upright and the CR2 lay on its side. Recorded there as "the RAW path looks not to be applying the
+orientation tag", which turned out to be true but not where it was expected.
+
+### What was actually wrong
+
+Not the develop. `dcraw_emu` applies the flip itself — asked for a frame tagged `Rotate 270 CW` it
+returns `3476x5208`, portrait, with no argument needed. The grid, however, does not develop: it shows
+the JPEG the camera embedded in the RAW, which is the whole reason RAW browsing is fast.
+
+That preview is a **bare JPEG with no EXIF of its own**:
+
+```text
+exiftool -b -PreviewImage IMG_0013.CR2   →  5184x3456, no Orientation tag
+exiftool -Orientation IMG_0013.CR2       →  Rotate 270 CW
+```
+
+The pixels come off the sensor in the sensor's own landscape, and the only record that the camera was
+held on its side is the tag in the RAW *around* the preview. So the renderer asked the preview which
+way up it went, was told nothing, and drew it as it found it. The comment at the call site asserted
+the opposite — "the embedded preview carries the RAW's EXIF orientation" — which is what let it stand.
+
+The develop path being correct is what made it visible: the viewer with **Develop RAW files** on
+showed the frame upright while the grid showed it on its side, and the two disagreed about the same
+photograph.
+
+### The fix
+
+The orientation travels with the bytes. `IEmbeddedPreviewExtractor` now returns an `EmbeddedPreview`
+— the JPEG, the container's orientation as a number, and the container's stored size — instead of a
+bare `byte[]`. The number rather than ExifTool's wording because the eight values are a standard set
+that imaging libraries number identically, so there is no second convention to keep in step; a test
+pins that Skia agrees rather than assuming it.
+
+Read through the shared `-stay_open` session, not a new process. These are text tags, which is all
+that session can carry, and a thumbnail should not cost two process starts. Only asked once a preview
+is actually in hand, so a file with nothing to show costs nothing extra.
+
+**The image still wins.** `OriginFor` takes the preview's own origin whenever it states one, and only
+falls back to the container's. A preview that does carry EXIF is therefore never turned twice.
+
+**The trap, and the trace it leaves.** A writer might rotate the preview's pixels and record no EXIF
+on it — the picture is already upright, and turning it again would lay it on its side. A quarter turn
+is the only thing that could have exchanged the preview's axes, so that shows up as its aspect no
+longer matching the RAW's stored aspect, and those are left alone. Mirrors and the half turn leave no
+such trace, and are applied as stated rather than guessed at.
+
+### The same bug, one layer down
+
+ImageIO turned out to have it too. `CGImageSourceCreateImageAtIndex` returns the image as the file
+stores it and leaves the orientation as a property, so it handed back `5184x3456` for the same frame.
+It is the second decoder, reached only when LibRaw fails — a Fujifilm RAF, a JPEG XL compressed DNG —
+so it was never going to show up on Canon files, but it was there. It now reads
+`kCGImagePropertyOrientation` from the source it already has open and turns the pixels through the
+same transform the preview path uses. The key is looked up by content, since `CFDictionary` compares
+keys with `CFEqual` and a string made locally matches ImageIO's constant without resolving a symbol.
+
+### Turning a picture is now lossless
+
+Found by a test that rotated a two-pixel image half a turn and got `241, 0, 14` where it expected
+`255, 0, 0`. The orientation transforms were drawing through Mitchell cubic resampling — the same
+options used for *resizing*, which is correct there and wrong here. Every one of the eight maps each
+source pixel onto exactly one destination pixel, so filtering can only soften, and on a small image it
+visibly bleeds neighbouring colours together. They now draw with nearest sampling: exact, and faster.
+This applies to every oriented image, not only RAW previews — portrait JPEGs were being needlessly
+softened on the way to the grid.
+
+### The cache had to be told
+
+The thumbnail cache key is `path|size|mtime|edge`, so every wrongly-turned thumbnail already on disk
+would have gone on being served for as long as the file was untouched — a fix nobody could see. The
+key now carries a renderer version, but **only for files that go through the RAW path**, tested by the
+same extension check the RAW generator uses to claim a file. A library of JPEGs does not pay for a fix
+to RAW handling. The JPEG key is pinned in a test as a literal hash, because the cost of breaking that
+— every thumbnail in every workspace regenerated — is invisible in a suite that only compares keys to
+each other.
+
+### Verified
+
+On the real folder, through the real code rather than by reasoning:
+
+| | grid (320px) | viewer (full) | ImageIO |
+|---|---|---|---|
+| `IMG_0013.CR2` — Rotate 270 CW | 213x320 | 3456x5184 | 3456x5184 |
+| `IMG_0019.CR2` — Rotate 270 CW | 213x320 | 3456x5184 | 3456x5184 |
+| `IMG_0001.CR2` — Horizontal | 320x213 | 5184x3456 | 5184x3456 |
+
+And in the application: a search for `IMG_002` drew `IMG_0025` and `IMG_0026` upright, both tagged
+`Rotate 270 CW`, beside a landscape `IMG_0020`. Settings restored byte-identical, clean exit, no `FTL`.
+
+The "No preview" tiles in that search were checked rather than assumed: those files no longer exist on
+disk and are stale catalog entries, which is unrelated and correct behaviour.
+
+- `dotnet test` — **945/945 passing** (26 new: the Skia/EXIF numbering, which side wins, the
+  already-turned guard, the mirror cases, the extractor's round trip through real ExifTool, the
+  lossless turn, and the cache key on both sides).

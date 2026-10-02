@@ -81,9 +81,9 @@ public sealed class RawThumbnailGenerator : IThumbnailGenerator
         return preview is null ? null : RenderPreview(preview, maxEdgePixels, file, cancellationToken);
     }
 
-    private bool NeedsDevelop(byte[] preview, int maxEdgePixels, MediaFile file)
+    private bool NeedsDevelop(EmbeddedPreview preview, int maxEdgePixels, MediaFile file)
     {
-        using var stream = new MemoryStream(preview);
+        using var stream = new MemoryStream(preview.Jpeg);
         if (SkiaThumbnailRenderer.ReadSize(stream) is not { } size)
         {
             return true;
@@ -121,14 +121,15 @@ public sealed class RawThumbnailGenerator : IThumbnailGenerator
         }
     }
 
-    private byte[]? RenderPreview(byte[] preview, int maxEdgePixels, MediaFile file, CancellationToken cancellationToken)
+    private byte[]? RenderPreview(
+        EmbeddedPreview preview, int maxEdgePixels, MediaFile file, CancellationToken cancellationToken)
     {
         try
         {
-            // The embedded preview carries the RAW's EXIF orientation, so the shared renderer
-            // rotates it correctly without needing to read the orientation separately.
-            using var stream = new MemoryStream(preview);
-            return SkiaThumbnailRenderer.Render(stream, maxEdgePixels, cancellationToken);
+            // The preview is handed over with the RAW's orientation beside it, because a Canon
+            // preview carries no EXIF of its own and would otherwise be shown on its side.
+            using var stream = new MemoryStream(preview.Jpeg);
+            return SkiaThumbnailRenderer.Render(stream, maxEdgePixels, cancellationToken, preview);
         }
         catch (OperationCanceledException)
         {

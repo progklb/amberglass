@@ -13,6 +13,10 @@ public interface IEmbeddedPreviewExtractor
 {
     bool IsAvailable { get; }
 
-    /// <summary>Encoded JPEG bytes, or null when the file carries no usable preview.</summary>
-    Task<byte[]?> ExtractAsync(MediaFile file, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The preview and the orientation to show it at, or null when the file carries no usable
+    /// preview. The orientation comes from the RAW rather than the preview because the preview
+    /// commonly has no EXIF of its own; see <see cref="EmbeddedPreview"/>.
+    /// </summary>
+    Task<EmbeddedPreview?> ExtractAsync(MediaFile file, CancellationToken cancellationToken = default);
 }

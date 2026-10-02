@@ -16,10 +16,10 @@ public class RawThumbnailGeneratorTests
 
         public int Calls { get; private set; }
 
-        public Task<byte[]?> ExtractAsync(MediaFile file, CancellationToken cancellationToken = default)
+        public Task<EmbeddedPreview?> ExtractAsync(MediaFile file, CancellationToken cancellationToken = default)
         {
             Calls++;
-            return Task.FromResult(preview);
+            return Task.FromResult(preview is null ? null : new EmbeddedPreview(preview));
         }
     }
 
@@ -224,7 +224,13 @@ public class RawThumbnailGeneratorTests
 public class ExifToolPreviewExtractorTests
 {
     private static ExifToolPreviewExtractor Create()
-        => new(new RealExifTool.Locator(), NullLogger<ExifToolPreviewExtractor>.Instance);
+        => Create(new RealExifTool.Locator());
+
+    private static ExifToolPreviewExtractor Create(IExifToolLocator locator)
+        => new(
+            locator,
+            new ExifToolHost(locator, NullLogger<ExifToolHost>.Instance),
+            NullLogger<ExifToolPreviewExtractor>.Instance);
 
     private static async Task RunExifToolAsync(params string[] arguments)
     {
@@ -281,10 +287,10 @@ public class ExifToolPreviewExtractorTests
         Assert.NotNull(preview);
 
         // Binary data must survive the process pipe intact.
-        Assert.Equal(0xFF, preview[0]);
-        Assert.Equal(0xD8, preview[1]);
+        Assert.Equal(0xFF, preview.Jpeg[0]);
+        Assert.Equal(0xD8, preview.Jpeg[1]);
 
-        using var decoded = SKBitmap.Decode(preview);
+        using var decoded = SKBitmap.Decode(preview.Jpeg);
         Assert.Equal(160, decoded.Width);
         Assert.Equal(120, decoded.Height);
     }
@@ -306,9 +312,7 @@ public class ExifToolPreviewExtractorTests
     [Fact]
     public async Task Reports_unavailable_without_exiftool()
     {
-        var extractor = new ExifToolPreviewExtractor(
-            new UnavailableLocator(),
-            NullLogger<ExifToolPreviewExtractor>.Instance);
+        var extractor = Create(new UnavailableLocator());
 
         Assert.False(extractor.IsAvailable);
         Assert.Null(await extractor.ExtractAsync(new MediaFile

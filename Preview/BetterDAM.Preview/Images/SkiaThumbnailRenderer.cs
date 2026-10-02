@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using BetterDAM.Core.Interfaces;
+using BetterDAM.Core.Models;
 using SkiaSharp;
 
 namespace BetterDAM.Preview.Images;
@@ -16,6 +17,13 @@ internal static class SkiaThumbnailRenderer
     private const int JpegQuality = 85;
 
     private static readonly SKSamplingOptions Sampling = new(SKCubicResampler.Mitchell);
+
+    /// <summary>
+    /// For the orientation transforms, which map every source pixel onto exactly one destination
+    /// pixel. Filtering an exact permutation can only soften it — and on a small image it visibly
+    /// bleeds neighbouring colours together — so turning a picture the right way up is lossless.
+    /// </summary>
+    private static readonly SKSamplingOptions NoResampling = new(SKFilterMode.Nearest, SKMipmapMode.None);
 
     /// <summary>Formats Skia can decode directly. Anything else needs its preview extracting first.</summary>
     private static readonly HashSet<string> DecodableExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -74,7 +82,15 @@ internal static class SkiaThumbnailRenderer
     }
 
     /// <summary>Returns encoded JPEG bytes, or null when the source cannot be decoded.</summary>
-    public static byte[]? Render(Stream source, int maxEdgePixels, CancellationToken cancellationToken)
+    /// <param name="fallback">
+    /// Orientation to use when the image does not state its own, from the file it was extracted from.
+    /// Null for an ordinary image file, which is the only authority on which way up it goes.
+    /// </param>
+    public static byte[]? Render(
+        Stream source,
+        int maxEdgePixels,
+        CancellationToken cancellationToken,
+        EmbeddedPreview? fallback = null)
     {
         using var codec = SKCodec.Create(source);
         if (codec is null)
@@ -84,6 +100,8 @@ internal static class SkiaThumbnailRenderer
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var origin = OriginFor(codec.EncodedOrigin, codec.Info.Width, codec.Info.Height, fallback);
+
         using var decoded = DecodeDownsampled(codec, maxEdgePixels);
         if (decoded is null)
         {
@@ -92,10 +110,61 @@ internal static class SkiaThumbnailRenderer
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var oriented = ApplyOrientation(decoded, codec.EncodedOrigin);
+        using var oriented = ApplyOrientation(decoded, origin);
         using var resized = ResizeToFit(oriented, maxEdgePixels);
         return Encode(resized);
     }
+
+    /// <summary>
+    /// Which way up to turn a decoded image, given what it says about itself and what the file it came
+    /// out of says about it.
+    ///
+    /// The image wins whenever it states an origin, so a preview that does carry EXIF is never turned
+    /// twice. Only when it is silent — the usual case for a RAW's preview — does the container's
+    /// orientation apply.
+    /// </summary>
+    /// <remarks>
+    /// The one trap is a camera that rotates the preview's pixels and then records no EXIF on it: the
+    /// picture is already upright and turning it again would lay it on its side. That shows up as the
+    /// preview's aspect already disagreeing with the RAW's stored aspect, since a quarter turn is the
+    /// only thing that could have exchanged them, so those are left alone. Orientations that do not
+    /// swap the axes leave no such trace and are applied as stated.
+    /// </remarks>
+    internal static SKEncodedOrigin OriginFor(
+        SKEncodedOrigin stated, int width, int height, EmbeddedPreview? fallback)
+    {
+        if (stated is not (SKEncodedOrigin.Default or SKEncodedOrigin.TopLeft))
+        {
+            return stated;
+        }
+
+        // Nothing to do when the container is silent, says the picture is already upright (1), or
+        // gives a value outside the standard eight.
+        if (fallback?.ExifOrientation is not { } exif || exif is < 2 or > 8)
+        {
+            return SKEncodedOrigin.Default;
+        }
+
+        // Skia numbers its origins exactly as EXIF does, which a test pins rather than assumes.
+        var origin = (SKEncodedOrigin)exif;
+
+        if (SwapsAxes(origin) &&
+            fallback is { SourceWidth: > 0, SourceHeight: > 0 } &&
+            width > 0 && height > 0 &&
+            IsPortrait(width, height) != IsPortrait(fallback.SourceWidth.Value, fallback.SourceHeight.Value))
+        {
+            // Already turned by whoever wrote it.
+            return SKEncodedOrigin.Default;
+        }
+
+        return origin;
+    }
+
+    private static bool IsPortrait(int width, int height) => height > width;
+
+    private static bool SwapsAxes(SKEncodedOrigin origin)
+        => origin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop
+            or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
 
     private static byte[] Encode(SKBitmap bitmap)
     {
@@ -164,6 +233,51 @@ internal static class SkiaThumbnailRenderer
     internal static SKBitmap ApplyOrientationTo(SKBitmap source, SKEncodedOrigin origin)
         => ApplyOrientation(source, origin);
 
+    /// <summary>
+    /// Turns already-decoded pixels the right way up, for a decoder that hands back the image as the
+    /// file stores it rather than as it should be seen. Returns the image unchanged when there is
+    /// nothing to do, so the common case copies nothing.
+    /// </summary>
+    internal static DecodedImage Orient(DecodedImage image, int exifOrientation)
+    {
+        if (exifOrientation is < 2 or > 8)
+        {
+            return image;
+        }
+
+        var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        if (image.Pixels.Length < info.BytesSize)
+        {
+            return image;
+        }
+
+        var pinned = GCHandle.Alloc(image.Pixels, GCHandleType.Pinned);
+
+        try
+        {
+            using var source = new SKBitmap();
+            if (!source.InstallPixels(info, pinned.AddrOfPinnedObject(), info.RowBytes))
+            {
+                return image;
+            }
+
+            using var oriented = ApplyOrientation(source, (SKEncodedOrigin)exifOrientation);
+            using var target = new SKBitmap(
+                new SKImageInfo(oriented.Width, oriented.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+
+            if (!oriented.CopyTo(target, SKColorType.Bgra8888))
+            {
+                return image;
+            }
+
+            return image with { Pixels = target.Bytes, Width = target.Width, Height = target.Height };
+        }
+        finally
+        {
+            pinned.Free();
+        }
+    }
+
     private static SKBitmap ApplyOrientation(SKBitmap source, SKEncodedOrigin origin)
     {
         if (origin is SKEncodedOrigin.Default or SKEncodedOrigin.TopLeft)
@@ -195,7 +309,7 @@ internal static class SkiaThumbnailRenderer
         using var canvas = new SKCanvas(target);
         using var image = SKImage.FromBitmap(source);
         canvas.SetMatrix(matrix);
-        canvas.DrawImage(image, 0, 0, Sampling);
+        canvas.DrawImage(image, 0, 0, NoResampling);
         canvas.Flush();
         return target;
     }

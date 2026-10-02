@@ -97,8 +97,8 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
                 return null;
             }
 
-            using var memory = new MemoryStream(preview);
-            return Decode(memory, cancellationToken);
+            using var memory = new MemoryStream(preview.Jpeg);
+            return Decode(memory, cancellationToken, preview);
         }
         catch (OperationCanceledException)
         {
@@ -234,7 +234,8 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
         }
     }
 
-    private static DecodedImage? Decode(Stream source, CancellationToken cancellationToken)
+    private static DecodedImage? Decode(
+        Stream source, CancellationToken cancellationToken, EmbeddedPreview? fallback = null)
     {
         using var codec = SKCodec.Create(source);
         if (codec is null)
@@ -252,7 +253,10 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var oriented = SkiaThumbnailRenderer.ApplyOrientationTo(decoded, codec.EncodedOrigin);
+        var origin = SkiaThumbnailRenderer.OriginFor(
+            codec.EncodedOrigin, codec.Info.Width, codec.Info.Height, fallback);
+
+        using var oriented = SkiaThumbnailRenderer.ApplyOrientationTo(decoded, origin);
 
         // BGRA to match what the UI blits, so handing it over is a copy rather than a conversion.
         var info = new SKImageInfo(oriented.Width, oriented.Height, SKColorType.Bgra8888, SKAlphaType.Premul);

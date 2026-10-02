@@ -13,8 +13,8 @@ public class FullImageDecoderTests
     {
         public bool IsAvailable => false;
 
-        public Task<byte[]?> ExtractAsync(MediaFile file, CancellationToken cancellationToken = default)
-            => Task.FromResult<byte[]?>(null);
+        public Task<EmbeddedPreview?> ExtractAsync(MediaFile file, CancellationToken cancellationToken = default)
+            => Task.FromResult<EmbeddedPreview?>(null);
     }
 
     /// <summary>Stands in for LibRaw, recording whether it was consulted.</summary>

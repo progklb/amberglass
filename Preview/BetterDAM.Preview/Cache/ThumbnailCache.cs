@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using BetterDAM.Core.Interfaces;
 using BetterDAM.Core.Models;
+using BetterDAM.Preview.Images;
 
 namespace BetterDAM.Preview.Cache;
 
@@ -19,12 +20,33 @@ public sealed class ThumbnailCache
         _paths = paths;
     }
 
+    /// <summary>
+    /// Bumped when a change to rendering makes previously cached thumbnails wrong, so they are
+    /// regenerated rather than served for the life of the file.
+    ///
+    /// Only applied to the files a change could have affected — see <see cref="IsVersioned"/>. A
+    /// library of JPEGs should not pay for a fix to RAW handling.
+    ///
+    /// 2: a RAW's embedded preview is now turned to match the orientation recorded in the RAW, which
+    /// previously left frames shot in portrait cached on their side.
+    /// </summary>
+    private const int RawRendererVersion = 2;
+
     public string GetCacheKey(MediaFile file, int maxEdgePixels)
     {
-        var raw = $"{file.FullPath}|{file.SizeBytes}|{file.ModifiedUtc.UtcTicks}|{maxEdgePixels}";
+        var version = IsVersioned(file) ? $"|v{RawRendererVersion}" : string.Empty;
+        var raw = $"{file.FullPath}|{file.SizeBytes}|{file.ModifiedUtc.UtcTicks}|{maxEdgePixels}{version}";
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
         return Convert.ToHexStringLower(hash);
     }
+
+    /// <summary>
+    /// Whether this file's thumbnail comes from the RAW path, and so is subject to
+    /// <see cref="RawRendererVersion"/>. The same test the RAW generator uses to claim a file, kept
+    /// as an extension check so it costs nothing and needs no file open.
+    /// </summary>
+    private static bool IsVersioned(MediaFile file)
+        => file.MediaType == MediaType.Image && !SkiaThumbnailRenderer.CanDecode(file.FullPath);
 
     public string GetCachePath(string key)
     {

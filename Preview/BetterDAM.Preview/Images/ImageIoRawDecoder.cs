@@ -118,7 +118,10 @@ public sealed class ImageIoRawDecoder : IRawDecoder
                 Marshal.Copy(buffer + ((nint)row * stride), pixels, row * rowBytes, rowBytes);
             }
 
-            return new DecodedImage(pixels, width, height, DecodedImage.Platform);
+            // ImageIO hands back the image as the file stores it, with the orientation left as a
+            // property rather than applied, so a frame shot in portrait arrives on its side.
+            return SkiaThumbnailRenderer.Orient(
+                new DecodedImage(pixels, width, height, DecodedImage.Platform), ReadOrientation(source));
         }
         catch (Exception ex)
         {
@@ -191,6 +194,60 @@ public sealed class ImageIoRawDecoder : IRawDecoder
 
     [DllImport(ImageIO)]
     private static extern IntPtr CGImageSourceCreateImageAtIndex(IntPtr source, nint index, IntPtr options);
+
+    /// <summary>
+    /// The file's EXIF orientation as ImageIO reports it, 1 to 8, or 1 when it says nothing.
+    ///
+    /// Read from the image source's properties rather than with ExifTool: it is already open, and a
+    /// decoder that needed a second tool to know which way up its own output goes would be the wrong
+    /// shape. The key is looked up by content — CFDictionary compares keys with CFEqual, so a string
+    /// made here matches ImageIO's own constant without having to resolve the symbol.
+    /// </summary>
+    private static int ReadOrientation(IntPtr source)
+    {
+        var properties = IntPtr.Zero;
+        var key = IntPtr.Zero;
+
+        try
+        {
+            properties = CGImageSourceCopyPropertiesAtIndex(source, 0, IntPtr.Zero);
+            if (properties == IntPtr.Zero)
+            {
+                return 1;
+            }
+
+            key = CFStringCreateWithCString(IntPtr.Zero, "Orientation", 0x08000100 /* UTF-8 */);
+            if (key == IntPtr.Zero)
+            {
+                return 1;
+            }
+
+            var value = CFDictionaryGetValue(properties, key);
+            if (value == IntPtr.Zero)
+            {
+                return 1;
+            }
+
+            return CFNumberGetValue(value, 9 /* kCFNumberIntType */, out var orientation) && orientation is >= 1 and <= 8
+                ? orientation
+                : 1;
+        }
+        finally
+        {
+            Release(key, CFRelease);
+            Release(properties, CFRelease);
+        }
+    }
+
+    [DllImport(ImageIO)]
+    private static extern IntPtr CGImageSourceCopyPropertiesAtIndex(IntPtr source, nint index, IntPtr options);
+
+    [DllImport(CoreFoundation)]
+    private static extern IntPtr CFDictionaryGetValue(IntPtr dictionary, IntPtr key);
+
+    [DllImport(CoreFoundation)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool CFNumberGetValue(IntPtr number, nint type, out int value);
 
     [DllImport(CoreGraphics)]
     private static extern nint CGImageGetWidth(IntPtr image);
