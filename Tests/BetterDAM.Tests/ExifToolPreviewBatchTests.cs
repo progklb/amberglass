@@ -150,15 +150,20 @@ public class ExifToolPreviewBatchTests
         File.WriteAllBytes(embedded, Jpeg(160, 120));
         await RunExifToolAsync("-overwrite_original", $"-ThumbnailImage<={embedded}", host0);
 
-        var before = Directory.GetDirectories(Path.GetTempPath(), "betterdam-preview-*").Length;
-
         var locator = new RealExifTool.Locator();
         await using var host = new ExifToolHost(locator, NullLogger<ExifToolHost>.Instance);
         var extractor = new ExifToolPreviewExtractor(locator, host, NullLogger<ExifToolPreviewExtractor>.Instance);
 
         Assert.NotNull(await extractor.ExtractAsync(MediaFile.FromFileInfo(new FileInfo(host0))));
 
-        Assert.Equal(before, Directory.GetDirectories(Path.GetTempPath(), "betterdam-preview-*").Length);
+        // Asked of this file rather than by counting folders: other tests extract at the same time,
+        // and a count would be measuring their comings and goings as much as this one's.
+        var leaked = Directory
+            .GetDirectories(Path.GetTempPath(), "betterdam-preview-*")
+            .Where(folder => File.Exists(ExifToolPreviewExtractor.OutputPathFor(folder, host0, "ThumbnailImage")))
+            .ToList();
+
+        Assert.Empty(leaked);
     }
 
     private static byte[] Jpeg(int width, int height)

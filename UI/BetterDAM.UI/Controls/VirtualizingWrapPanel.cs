@@ -18,6 +18,11 @@ namespace BetterDAM.UI.Controls;
 /// The layout assumes **uniformly sized items**, which is true here: every tile is the same square
 /// plus a caption. That assumption is what makes the arithmetic — and therefore scrolling — cheap
 /// and exact rather than requiring per-item measurement bookkeeping.
+///
+/// <see cref="SingleRow"/> lays the same tiles out as one row that scrolls sideways, which is the
+/// filmstrip. It is the same panel rather than a second one because the only thing that changes is
+/// how many columns there are and which axis the viewport is read from — and because a panel swap
+/// would throw away every realized container on each toggle.
 /// </summary>
 public class VirtualizingWrapPanel : VirtualizingPanel
 {
@@ -46,7 +51,20 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         set => SetValue(ItemWidthProperty, value);
     }
 
-    static VirtualizingWrapPanel() => AffectsMeasure<VirtualizingWrapPanel>(ItemWidthProperty);
+    /// <summary>
+    /// Lay every item out in one row that scrolls sideways, instead of wrapping into a grid.
+    /// </summary>
+    public static readonly StyledProperty<bool> SingleRowProperty =
+        AvaloniaProperty.Register<VirtualizingWrapPanel, bool>(nameof(SingleRow));
+
+    public bool SingleRow
+    {
+        get => GetValue(SingleRowProperty);
+        set => SetValue(SingleRowProperty, value);
+    }
+
+    static VirtualizingWrapPanel()
+        => AffectsMeasure<VirtualizingWrapPanel>(ItemWidthProperty, SingleRowProperty);
 
     private readonly Dictionary<int, Control> _realized = [];
     private readonly Dictionary<Control, object?> _recycleKeys = [];
@@ -88,9 +106,21 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         // needing to be told about it.
         UpdateItemSize(availableSize);
 
-        var width = double.IsInfinity(availableSize.Width) ? _itemSize.Width : availableSize.Width;
-        _columns = Math.Max(1, (int)(width / _itemSize.Width));
-        var rows = (int)Math.Ceiling(items.Count / (double)_columns);
+        int rows;
+
+        if (SingleRow)
+        {
+            // Every item in one row: the column count is the item count, which makes the rest of
+            // the arithmetic — and ScrollIntoView — fall out unchanged.
+            _columns = items.Count;
+            rows = 1;
+        }
+        else
+        {
+            var width = double.IsInfinity(availableSize.Width) ? _itemSize.Width : availableSize.Width;
+            _columns = Math.Max(1, (int)(width / _itemSize.Width));
+            rows = (int)Math.Ceiling(items.Count / (double)_columns);
+        }
 
         var (firstIndex, lastIndex) = GetVisibleRange(items.Count, rows);
 
@@ -126,6 +156,11 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
     private (int First, int Last) GetVisibleRange(int itemCount, int rows)
     {
+        if (SingleRow)
+        {
+            return GetVisibleRangeAcross(itemCount);
+        }
+
         // Before the first viewport report there is nothing to go on; realize a screenful's worth so
         // the grid is never blank on open.
         if (_viewport.Height <= 0)
@@ -144,6 +179,41 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         var first = Math.Min(itemCount - 1, firstRow * _columns);
         var last = Math.Min(itemCount - 1, ((lastRow + 1) * _columns) - 1);
         return (first, last);
+    }
+
+    /// <summary>
+    /// The same calculation as the grid's, read along X instead of Y, because in a single row the
+    /// thing that scrolls out of view is a column rather than a row.
+    /// </summary>
+    private (int First, int Last) GetVisibleRangeAcross(int itemCount)
+        => VisibleColumns(itemCount, _viewport.X, _viewport.Right, _viewport.Width, _itemSize.Width);
+
+    /// <summary>
+    /// Which items a single row has to realize, given where the viewport sits along it. Pulled out
+    /// as arithmetic with no panel attached because it is what virtualization actually is: get it
+    /// wrong and the strip either shows gaps or quietly realizes every tile in the folder.
+    /// </summary>
+    internal static (int First, int Last) VisibleColumns(
+        int itemCount, double viewportX, double viewportRight, double viewportWidth, double itemWidth)
+    {
+        if (itemCount <= 0)
+        {
+            return (0, -1);
+        }
+
+        // Before the first viewport report there is nothing to go on; realize a little so the strip
+        // is never blank on open.
+        if (viewportWidth <= 0 || itemWidth <= 0)
+        {
+            return (0, Math.Min(itemCount - 1, BufferRows));
+        }
+
+        var first = Math.Max(0, (int)Math.Floor(viewportX / itemWidth) - BufferRows);
+        var last = Math.Min(itemCount - 1, (int)Math.Ceiling(viewportRight / itemWidth) + BufferRows);
+
+        first = Math.Min(itemCount - 1, first);
+
+        return (first, Math.Max(first, last));
     }
 
     private void UpdateItemSize(Size availableSize)
@@ -171,7 +241,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel
             _itemSize = desired;
         }
 
-        if (!double.IsInfinity(availableSize.Width) && _itemSize.Width > availableSize.Width)
+        // A tile wider than the panel is narrowed to fit, because in a grid there is nowhere else
+        // for it to go. A single row scrolls sideways, so there it keeps its natural width.
+        if (!SingleRow && !double.IsInfinity(availableSize.Width) && _itemSize.Width > availableSize.Width)
         {
             _itemSize = new Size(availableSize.Width, _itemSize.Height);
         }

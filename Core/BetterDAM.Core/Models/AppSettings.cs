@@ -136,6 +136,16 @@ public sealed record AppSettings
     public bool StackPairs { get; init; }
 
     /// <summary>
+    /// Whether the thumbnails are drawn as one sideways-scrolling row with the preview filling the
+    /// rest of the window, rather than as a grid.
+    ///
+    /// Remembered, because it is a way of working rather than a momentary choice: culling a shoot
+    /// one frame at a time and laying a whole shoot out are different jobs, and whichever was last
+    /// in use is the one to come back to.
+    /// </summary>
+    public bool Filmstrip { get; init; }
+
+    /// <summary>
     /// Which half of a collapsed pair is drawn. RAW by default — it is the negative, and the file
     /// a photographer means when they say the photograph.
     /// </summary>

@@ -164,6 +164,12 @@
                 </DockPanel>
                 <Slider Minimum="90" Maximum="320" Value="{Binding ThumbnailSize}" />
 
+                <CheckBox Content="Filmstrip" FontSize="11"
+                          IsChecked="{Binding Filmstrip}"
+                          ToolTip.Tip="One row of thumbnails with the preview filling the rest. Dragging the divider to the bottom does the same thing (E)." />
+                <TextBlock Classes="hint" IsVisible="{Binding Filmstrip}"
+                           Text="The thumbnail size still sets how tall the strip is." />
+
                 <Separator Margin="0,4" />
 
                 <TextBlock Text="RAW files" FontSize="11" />
@@ -748,12 +754,21 @@
                     IsVisible="{Binding IsFolderPanelVisible}" />
 
       <!-- Thumbnail grid over preview -->
-      <Grid Grid.Column="2">
+      <!--
+        Named so the code-behind can reach the row definitions. x:Name on a RowDefinition would not
+        do: inside a property element it generates no field.
+      -->
+      <Grid Grid.Column="2" x:Name="ContentRows">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
-          <RowDefinition Height="*" />
+          <!--
+            Which of these two carries the star is the whole of the filmstrip: the thumbnails take
+            the space in a grid, the preview takes it in a filmstrip. Named so the code-behind can
+            swap them, because the splitter writes to them too and a binding would fight it.
+          -->
+          <RowDefinition Height="*" MinHeight="0" />
           <RowDefinition Height="{DynamicResource AppSplitterWidth}" />
-          <RowDefinition Height="280" />
+          <RowDefinition Height="280" MinHeight="0" />
         </Grid.RowDefinitions>
 
         <!--
@@ -797,7 +812,8 @@
           </StackPanel>
         </Panel>
 
-        <ListBox Background="Transparent"
+        <ListBox x:Name="ThumbnailGrid"
+                 Background="Transparent"
                  Classes.handDrawn="{DynamicResource AppRingEnabled}"
                  ItemsSource="{Binding VisibleItems}"
                  SelectedItem="{Binding SelectedItem}"
@@ -807,9 +823,11 @@
           <ListBox.ItemsPanel>
             <ItemsPanelTemplate>
               <!-- Virtualizing: only tiles in view are realized, so opening a folder of 50,000
-                   files does not queue 50,000 thumbnail jobs. -->
+                   files does not queue 50,000 thumbnail jobs. The same panel lays the filmstrip
+                   out, so toggling does not throw away every realized tile. -->
               <controls:VirtualizingWrapPanel
-                  ItemWidth="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).ThumbnailSize}" />
+                  ItemWidth="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).ThumbnailSize}"
+                  SingleRow="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).Filmstrip}" />
             </ItemsPanelTemplate>
           </ListBox.ItemsPanel>
           <ListBox.ItemTemplate>
@@ -1034,7 +1052,8 @@
 
         </Panel>
 
-        <GridSplitter Grid.Row="2" ResizeDirection="Rows" Background="#22FFFFFF" />
+        <GridSplitter x:Name="PreviewSplitter" Grid.Row="2" ResizeDirection="Rows"
+                      Background="#22FFFFFF" DragCompleted="OnPreviewSplitterDragged" />
 
         <Border Grid.Row="3" Background="{DynamicResource AppPanelBrush}">
           <Panel>

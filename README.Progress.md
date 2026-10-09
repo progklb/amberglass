@@ -6054,3 +6054,63 @@ stacking badges, no leaked extraction folders, clean exit, settings restored byt
 - `dotnet test` — **951/951 passing** (6 new: the mirrored output path, two files of the same name in
   different folders, one tag per file, 40 files asked for at once each getting its own picture, a file
   with no preview not disturbing the others, and the temporary folder being cleared).
+
+---
+
+## The filmstrip ✅
+
+Lightroom keeps the shoot in a single row along the edge while one frame fills the screen, which is
+what culling actually looks like. The grid and the preview were already two halves of one column
+split by a divider, so most of this was deciding what the thing *is* rather than building it.
+
+### Not a threshold on the thumbnail slider
+
+The first idea was that the smallest thumbnail size should collapse into one line. It was the wrong
+one: it welds together two independent decisions — how big a tile is, and how many rows there are.
+Small tiles in many rows is a useful view in its own right, it is how a whole shoot is taken in at
+once, and a threshold would make it unreachable. It also grows a hidden mode at one end of a slider.
+
+So the filmstrip is a state, and the thumbnail size goes on meaning tile size — in the strip it sets
+how tall the strip is.
+
+### Three ways in, and the third is the one worth having
+
+A checkbox in View options, `E` (Lightroom's key for the same idea), and **dragging the divider to
+the floor**. The third is the one that matters: the gesture already exists and already means "give me
+more picture", so the mode is found by doing the obvious thing rather than by locating a control.
+Dragging back up leaves it, and the divider returns to where it was rather than to a default.
+
+Leaving needs a wider gap than entering — the row has to be pulled open past the point it would snap
+shut at — or letting go anywhere near the bottom would flip the mode back and forth.
+
+### One panel, not two
+
+`VirtualizingWrapPanel` gained a `SingleRow` mode rather than the strip getting a panel of its own.
+In a single row the column count is the item count and the viewport is read along X instead of Y;
+everything else — the realize/recycle machinery, `ScrollIntoView`, the uniform-size arithmetic — is
+unchanged and already proven on large folders. A second panel would also have meant a template swap
+on every toggle, throwing away every realized container.
+
+The row heights are moved by the code-behind rather than bound, because the divider writes to those
+same heights as it is dragged and a binding would be fighting it for ownership. The row definitions
+are reached through the Grid, since `x:Name` on a `RowDefinition` generates no field — the same trap
+the window's constructor already had a comment about.
+
+### Verified
+
+On the real workspace, 4,080 files: the strip drew one row with the preview filling the window below;
+arrowing along it scrolled the strip, kept realizing tiles as it went and brought each selection into
+view, with the preview and the inspector following. `E` returned it to the grid with the divider back
+where it had been. No `FTL`, clean exit, settings restored byte-identical.
+
+Mouse automation could not be used this time — synthetic clicks no longer reach the window without an
+accessibility grant — so the run was driven by keyboard, and the filmstrip state was reached by
+setting it in `settings.json` before launching rather than by clicking the checkbox.
+
+- `dotnet test` — **957/957 passing** (6 new on the single-row arithmetic: where the realized window
+  sits, that its size does not grow with the folder, the ends, and the empty case).
+
+One of the new batch tests from the previous change turned out to be flaky and was fixed here: it
+counted `betterdam-preview-*` folders in the system temp directory, which measures every other test
+extracting at the same time as much as its own. It now asks whether *this* file's extraction is still
+on disk.

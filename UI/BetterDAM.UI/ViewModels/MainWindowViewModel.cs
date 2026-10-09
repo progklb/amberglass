@@ -126,6 +126,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         UpdateEmptyState();
 
         _stackPairs = _settings.Current.StackPairs;
+        _filmstrip = _settings.Current.Filmstrip;
         _stackShows = _settings.Current.StackShows;
 
         RecentWorkspaces = new ObservableCollection<string>(_settings.Current.RecentWorkspaces);
@@ -286,6 +287,37 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _stackPairs;
+
+    /// <summary>
+    /// One sideways-scrolling row of thumbnails with the preview filling the rest, rather than a
+    /// grid. The tiles, their badges and their marks are unchanged — only how they are laid out.
+    /// </summary>
+    [ObservableProperty]
+    private bool _filmstrip;
+
+    partial void OnFilmstripChanged(bool value)
+    {
+        if (_settings.Current.Filmstrip != value)
+        {
+            _ = _settings.SaveAsync(_settings.Current with { Filmstrip = value });
+        }
+
+        // The row that was being looked at should still be the row being looked at.
+        if (SelectedItem is not null)
+        {
+            ScrollSelectionIntoView?.Invoke(SelectedItem);
+        }
+    }
+
+    /// <summary>
+    /// Raised when the layout has changed under the selection and the view needs to bring it back
+    /// into sight. The view model has no business knowing about scrolling, but it is the only thing
+    /// that knows the layout changed.
+    /// </summary>
+    public event Action<MediaItemViewModel>? ScrollSelectionIntoView;
+
+    [RelayCommand]
+    private void ToggleFilmstrip() => Filmstrip = !Filmstrip;
 
     partial void OnStackPairsChanged(bool value)
     {

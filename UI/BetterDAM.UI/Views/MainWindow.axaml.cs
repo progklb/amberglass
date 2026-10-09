@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -69,6 +70,10 @@ public partial class MainWindow : Window
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
             UpdateWorkspaceMenu();
 
+            viewModel.ScrollSelectionIntoView -= OnScrollSelectionIntoView;
+            viewModel.ScrollSelectionIntoView += OnScrollSelectionIntoView;
+            ApplyFilmstripLayout(viewModel.Filmstrip);
+
             // Frames are pushed rather than bound: a binding would mean allocating a bitmap per
             // frame, where the surface reuses one and blits into it.
             viewModel.Player.FrameReady -= OnFrameReady;
@@ -84,7 +89,19 @@ public partial class MainWindow : Window
         {
             UpdateWorkspaceMenu();
         }
+        else if (e.PropertyName == nameof(MainWindowViewModel.Filmstrip)
+                 && DataContext is MainWindowViewModel viewModel)
+        {
+            ApplyFilmstripLayout(viewModel.Filmstrip);
+        }
     }
+
+    /// <summary>
+    /// After a layout change the selected tile is usually off screen, and it is the one the user was
+    /// looking at. Deferred so the new row arrangement has been measured before anything is scrolled.
+    /// </summary>
+    private void OnScrollSelectionIntoView(MediaItemViewModel item)
+        => Dispatcher.UIThread.Post(() => ThumbnailGrid.ScrollIntoView(item), DispatcherPriority.Background);
 
     private void OnGridSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
@@ -316,8 +333,110 @@ public partial class MainWindow : Window
         {
             OpenFullscreen();
             e.Handled = true;
+            return;
+        }
+
+        // E for the filmstrip, which is the key Lightroom uses for the same idea of one picture
+        // large with the shoot along the bottom. Ignored while typing, like F.
+        if (e.Key == Key.E && e.KeyModifiers == KeyModifiers.None
+            && FocusManager?.GetFocusedElement() is not TextBox
+            && DataContext is MainWindowViewModel filmstripTarget)
+        {
+            filmstripTarget.Filmstrip = !filmstripTarget.Filmstrip;
+            e.Handled = true;
         }
     }
+
+    // ---- Filmstrip ----------------------------------------------------------------------------
+
+    /// <summary>
+    /// How much of a row has to be left before a drag counts as asking for the filmstrip. Just over
+    /// one row, so the snap happens while a second row is still being squeezed out rather than
+    /// after the first has already been cut in half.
+    /// </summary>
+    private const double FilmstripSnapRows = 1.35;
+
+    /// <summary>
+    /// The thumbnail and preview heights from before the filmstrip, so leaving it puts the divider
+    /// back where it was rather than at some default.
+    /// </summary>
+    private GridLength? _gridThumbnailHeight;
+    private GridLength? _gridPreviewHeight;
+
+    private RowDefinition ThumbnailRow() => ContentRows.RowDefinitions[1];
+
+    private RowDefinition PreviewRow() => ContentRows.RowDefinitions[3];
+
+    /// <summary>
+    /// Moves the star from the thumbnails to the preview and back.
+    ///
+    /// Done here rather than by binding the row heights because the splitter writes to those same
+    /// heights as it is dragged, and a binding would be fighting it for ownership.
+    /// </summary>
+    private void ApplyFilmstripLayout(bool filmstrip)
+    {
+        if (filmstrip)
+        {
+            if (_gridThumbnailHeight is null)
+            {
+                _gridThumbnailHeight = ThumbnailRow().Height;
+                _gridPreviewHeight = PreviewRow().Height;
+            }
+
+            // Auto, so the row is exactly as tall as one tile and the thumbnail size still governs it.
+            ThumbnailRow().Height = GridLength.Auto;
+            PreviewRow().Height = new GridLength(1, GridUnitType.Star);
+            ThumbnailGrid.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+            ThumbnailGrid.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
+        }
+        else
+        {
+            ThumbnailRow().Height = _gridThumbnailHeight ?? new GridLength(1, GridUnitType.Star);
+            PreviewRow().Height = _gridPreviewHeight ?? new GridLength(280);
+            _gridThumbnailHeight = null;
+            _gridPreviewHeight = null;
+            ThumbnailGrid.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
+            ThumbnailGrid.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        }
+    }
+
+    /// <summary>
+    /// Dragging the divider to the floor is the other way into the filmstrip, and dragging it back
+    /// up is the way out. The gesture already means "give me more picture", so the mode is found by
+    /// doing the obvious thing rather than by locating a checkbox.
+    /// </summary>
+    private void OnPreviewSplitterDragged(object? sender, VectorEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var tile = viewModel.ThumbnailSize + TileChrome;
+
+        if (!viewModel.Filmstrip)
+        {
+            if (ThumbnailRow().ActualHeight < tile * FilmstripSnapRows)
+            {
+                viewModel.Filmstrip = true;
+            }
+
+            return;
+        }
+
+        // Leaving: the drag has to have pulled the row open past the point it would snap shut at,
+        // otherwise letting go anywhere near the bottom would flip the mode back and forth.
+        if (ThumbnailRow().ActualHeight > tile * FilmstripSnapRows)
+        {
+            viewModel.Filmstrip = false;
+        }
+    }
+
+    /// <summary>
+    /// Roughly what a tile adds to its thumbnail: the caption, the margins and the rebate. Only used
+    /// to decide when a drag has run out of room for a second row, so an approximation is enough.
+    /// </summary>
+    private const double TileChrome = 40;
 
     private void OnPreviewDoubleTapped(object? sender, TappedEventArgs e) => OpenFullscreen();
 
