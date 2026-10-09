@@ -5966,3 +5966,91 @@ disk and are stale catalog entries, which is unrelated and correct behaviour.
 - `dotnet test` — **945/945 passing** (26 new: the Skia/EXIF numbering, which side wins, the
   already-turned guard, the mirror cases, the extractor's round trip through real ExifTool, the
   lossless turn, and the cache key on both sides).
+
+---
+
+## Performance — the cost of a RAW thumbnail ⚡
+
+Measured before changing anything, on the D2 folder. A RAW grid tile at 320px, run sequentially:
+
+| phase | ms/file |
+|---|---|
+| ExifTool one-shot to extract the embedded preview | ~107 |
+| JPEG decode | 31 |
+| orientation copy | 2 |
+| resize + encode | 2 |
+
+Extracting a 4.4MB preview and a 20KB thumbnail both took 74ms, which says the cost is the process
+start and not the bytes.
+
+### Batching, and the measurement that corrected it
+
+Sequentially, 24 files cost 1789ms as one process each and 322ms as one batched command — 5.6x. That
+number does not survive contact with the application, and it is worth recording why. The grid already
+runs six extractions at once, so six process starts were already overlapping; at that concurrency the
+same comparison is 703ms against 757ms, and the first attempt at batching was **slower than what it
+replaced**. Two causes: the shared ExifTool session runs one command at a time, so routing everything
+through it removed the parallelism, and a fixed 15ms linger was charged to every request whether it
+collected company or not.
+
+The fix was to stop guessing. A request starts a batch immediately when the session is idle, and only
+queues when it is busy — so the batch size follows the load, the first request never waits, and the
+queue fills by itself while a command is running. No timer and no guessed batch size.
+
+| at the grid's real concurrency of 6 | before | after |
+|---|---|---|
+| burst of 24 extractions | 703ms | 616ms |
+| one extraction on its own | 95ms | ~20ms |
+| 24 thumbnails end to end, 320px | 832ms | ~640ms |
+
+The single-file case is the one that is felt: it is the viewer opening a frame, and the first tiles
+after a folder opens.
+
+### How binary gets through a text session
+
+The session reads stdout as text, line by line, watching for `{ready}`, which is why preview
+extraction originally needed its own process. `-W` is the way round it: ExifTool writes each extracted
+image to its own file and reports only a line of text. Nothing binary crosses stdout and no process
+starts.
+
+The output pattern is `%d%f__%t.jpg`, which rebuilds each source path underneath a temporary folder.
+`%d` because two files called `IMG_0001` in different folders would otherwise overwrite each other —
+the batch's one real hazard, and the thing most of the new tests are pointed at. `%t` because the four
+candidate preview tags would otherwise collide with each other, and a tag a file does not carry simply
+produces no file, so the existing preference order still picks the best one that materialised.
+
+A batch that fails falls back to the per-file path rather than reporting no preview, which would show
+as a blank tile for a file that has one.
+
+### Copies that were doing nothing
+
+`ApplyOrientation` returned `source.Copy()` when the picture was already upright, and `ResizeToFit`
+did the same when it already fitted — a full bitmap copied for nothing, on the common path. Measured
+at 2.1ms a file for a grid tile and 12.5ms for a full-size preview. Both now return null to mean
+"nothing to do", and the caller keeps what it already had.
+
+### A pragma that was never being set
+
+`journal_mode=WAL` is stored in the database file, but `synchronous` is a property of the *connection*
+and resets to FULL on each new one — so every commit was paying an fsync and most of what WAL is for
+was going unclaimed. Now set to NORMAL on open. The trade is specifically right here: the catalog is
+an index over the files, every fact in it came from a file, so the worst a lost transaction costs is
+re-reading those files.
+
+### Left alone, deliberately
+
+**Decode** is what remains and is most of it. libjpeg has to read the whole 3MB preview even to emit
+at 1/8 scale. The only lever is the 160x120 embedded thumbnail, which the existing `MaxUpscale = 2`
+rule would accept for a 320px tile, but a 2x upscale looks soft and the grid is the thing being
+judged in.
+
+**A cache of extracted previews**, so the grid's 320px extraction could serve the viewer's 1600px
+request, was planned and then dropped: once extraction fell to about 20ms the cache was 24MB of held
+memory and an invalidation rule to buy that back.
+
+Verified in the application on the D2 folder: the same tiles, the same frames upright, the same
+stacking badges, no leaked extraction folders, clean exit, settings restored byte-identical.
+
+- `dotnet test` — **951/951 passing** (6 new: the mirrored output path, two files of the same name in
+  different folders, one tag per file, 40 files asked for at once each getting its own picture, a file
+  with no preview not disturbing the others, and the temporary folder being cleared).

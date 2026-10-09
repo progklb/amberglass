@@ -256,13 +256,15 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
         var origin = SkiaThumbnailRenderer.OriginFor(
             codec.EncodedOrigin, codec.Info.Width, codec.Info.Height, fallback);
 
+        // Null means it is already the right way up, and the decoded bitmap stands as it is.
         using var oriented = SkiaThumbnailRenderer.ApplyOrientationTo(decoded, origin);
+        var upright = oriented ?? decoded;
 
         // BGRA to match what the UI blits, so handing it over is a copy rather than a conversion.
-        var info = new SKImageInfo(oriented.Width, oriented.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var info = new SKImageInfo(upright.Width, upright.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var target = new SKBitmap(info);
 
-        if (!oriented.CopyTo(target, SKColorType.Bgra8888))
+        if (!upright.CopyTo(target, SKColorType.Bgra8888))
         {
             return null;
         }

@@ -47,6 +47,13 @@ public sealed class SqliteCatalog : ICatalog
 
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
+        // journal_mode is stored in the database file, but synchronous is a property of the
+        // connection and resets to FULL on every new one — which means fsync on each commit and
+        // most of what WAL is for going unclaimed. NORMAL is the usual pairing, and is the right
+        // trade here specifically: the catalog is an index over the files, every fact in it came
+        // from a file, so the worst a lost transaction costs is re-reading those files.
+        await connection.ExecuteAsync("PRAGMA synchronous=NORMAL;").ConfigureAwait(false);
+
         if (!string.Equals(_initialisedPath, path, StringComparison.Ordinal))
         {
             CatalogSchema.Apply(connection);
