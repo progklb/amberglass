@@ -75,9 +75,9 @@ public class ChangesViewModelTests
         CreatedUtc = DateTimeOffset.UnixEpoch
     };
 
-    private static readonly MediaFile A = FileAt("/ws/2025/a.raf");
-    private static readonly MediaFile B = FileAt("/ws/2025/b.raf");
-    private static readonly MediaFile C = FileAt("/ws/2024/c.raf");
+    private static readonly MediaFile A = FileAt("/ws/2025/a.jpg");
+    private static readonly MediaFile B = FileAt("/ws/2025/b.jpg");
+    private static readonly MediaFile C = FileAt("/ws/2024/c.jpg");
 
     private static readonly EditableMetadata Original = new() { Rating = 2, Keywords = ["sand"] };
 

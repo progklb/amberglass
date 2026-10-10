@@ -46,6 +46,22 @@ public sealed record MediaMetadata
     public bool HasSidecar => SidecarPath is not null;
 
     /// <summary>
+    /// When the file's own metadata last changed, and when the sidecar's did.
+    ///
+    /// These are what tell an ordinary non-destructive override from an external edit, which are
+    /// otherwise the same thing on disk: a sidecar that disagrees with its file is the normal state
+    /// of every file this application has ever edited. Only the file changing *after* the sidecar
+    /// says somebody else has been here.
+    ///
+    /// <c>xmp:MetadataDate</c> where both sides carry it, because it moves only when metadata moves —
+    /// re-exporting or rotating a JPEG leaves it alone where a file timestamp would not. Falling back
+    /// to the file timestamps, which are always there.
+    /// </summary>
+    public DateTimeOffset? FileMetadataChangedUtc { get; init; }
+
+    public DateTimeOffset? SidecarMetadataChangedUtc { get; init; }
+
+    /// <summary>
     /// What the user sees before their own pending edits: the sidecar takes precedence, because it
     /// is the working representation this application writes to.
     /// </summary>

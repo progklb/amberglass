@@ -53,4 +53,28 @@ public static class MediaTypeRegistry
     public static bool IsSupported(string filePath) => GetMediaType(filePath) != MediaType.Unsupported;
 
     public static bool IsRaw(string filePath) => RawExtensions.Contains(Path.GetExtension(filePath));
+
+    /// <summary>
+    /// The proprietary raw formats, which are the ones nothing should write into.
+    ///
+    /// DNG is deliberately absent even though it is raw: it is a container designed to hold XMP, and
+    /// Adobe's own tools write metadata straight into it. "Raw" is the wrong line to draw here — the
+    /// question is whether the format is one whose vendor sanctions being written to, and for a CR2
+    /// or an NEF the answer is no.
+    /// </summary>
+    private static readonly HashSet<string> ClosedRawExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".cr2", ".cr3", ".nef", ".arw", ".raf", ".orf", ".rw2", ".srw", ".pef"
+    };
+
+    /// <summary>
+    /// Whether metadata can be written into the file itself, rather than only beside it.
+    ///
+    /// False for proprietary raw. Those formats are undocumented, every camera maker's differs, and
+    /// the whole industry — Lightroom, Camera Raw, Bridge — leaves them alone and keeps user metadata
+    /// in a sidecar. The sidecar is the record for them, and its disagreeing with the file is the
+    /// arrangement working rather than a fault.
+    /// </summary>
+    public static bool CanEmbedMetadata(string filePath)
+        => !ClosedRawExtensions.Contains(Path.GetExtension(filePath));
 }

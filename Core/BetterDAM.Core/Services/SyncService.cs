@@ -58,7 +58,7 @@ public sealed class SyncService : ISyncService
         foreach (var (change, file) in files)
         {
             var hasConflict = metadata.TryGetValue(change.FilePath, out var current) &&
-                              MetadataConflictDetector.Detect(current).Length > 0;
+                              MetadataConflictDetector.Detect(current, file!.FullPath).Length > 0;
 
             items.Add(new SyncPlanItem(file!, change.Edited, hasConflict));
         }
@@ -150,6 +150,15 @@ public sealed class SyncService : ISyncService
         }
 
         if (!options.EmbedMetadata)
+        {
+            return new SyncItemResult(item.File.FullPath, SyncOutcome.SidecarWritten);
+        }
+
+        // A proprietary raw file is left alone whatever the options say. Its format is undocumented
+        // and differs by camera maker, and nothing in the industry writes into one — Lightroom,
+        // Camera Raw and Bridge all keep user metadata beside it instead. The sidecar written above
+        // is the record for this file, so there is nothing further to do and nothing has failed.
+        if (!MediaTypeRegistry.CanEmbedMetadata(item.File.FullPath))
         {
             return new SyncItemResult(item.File.FullPath, SyncOutcome.SidecarWritten);
         }

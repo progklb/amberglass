@@ -157,8 +157,62 @@ public sealed class ExifToolMetadataProvider : IMetadataProvider
             Video = file.MediaType == MediaType.Video ? ReadVideo(media) : VideoInfo.Empty,
             Dimensions = ReadDimensions(media),
             RawTags = ReadRawTags(media, sidecar),
-            SidecarPath = sidecar is null ? null : sidecarPath
+            SidecarPath = sidecar is null ? null : sidecarPath,
+            FileMetadataChangedUtc = MetadataChangedAt(media, file.FullPath),
+            SidecarMetadataChangedUtc = sidecar is null ? null : MetadataChangedAt(sidecar, sidecarPath)
         };
+
+    /// <summary>
+    /// When this document's metadata last changed.
+    ///
+    /// <c>xmp:MetadataDate</c> first, because it moves only when metadata moves — re-exporting or
+    /// rotating a JPEG leaves it where it was, while the file's timestamp would jump and look like
+    /// somebody had edited the metadata. The file's own timestamp is the fallback, since plenty of
+    /// files carry no XMP date at all.
+    /// </summary>
+    private static DateTimeOffset? MetadataChangedAt(Dictionary<string, JsonElement> document, string? path)
+    {
+        if (First(document, "XMP:MetadataDate", "XMP-xmp:MetadataDate") is { } stamp
+            && TryParseExifDate(stamp) is { } parsed)
+        {
+            return parsed;
+        }
+
+        try
+        {
+            return path is not null && File.Exists(path)
+                ? new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero)
+                : null;
+        }
+        catch (Exception)
+        {
+            // An unreadable timestamp is simply unknown, which the detector already treats as
+            // "cannot rule the disagreement out".
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// ExifTool's date format is <c>yyyy:MM:dd HH:mm:ss</c>, optionally with a fraction and a zone,
+    /// which no standard parse handles on its own.
+    /// </summary>
+    internal static DateTimeOffset? TryParseExifDate(string value)
+    {
+        var text = value.Trim();
+        if (text.Length < 19)
+        {
+            return null;
+        }
+
+        // Only the date part uses colons as separators; swapping them for dashes makes the rest
+        // ordinary ISO-8601, zone and all.
+        var normalised = string.Concat(text[..10].Replace(':', '-'), text[10..]);
+
+        return DateTimeOffset.TryParse(
+            normalised, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed)
+            ? parsed.ToUniversalTime()
+            : null;
+    }
 
     private List<Dictionary<string, JsonElement>> ParseDocuments(string json, string context)
     {

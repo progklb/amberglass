@@ -75,7 +75,7 @@ public sealed class ConflictedFileViewModel
         Metadata = metadata;
         Item = item;
         Folder = folder;
-        Conflicts = MetadataConflictDetector.Detect(metadata);
+        Conflicts = MetadataConflictDetector.Detect(metadata, file.FullPath);
     }
 
     public MediaFile File { get; }
@@ -187,7 +187,7 @@ public sealed partial class ChangesViewModel : ObservableObject
                 return;
             }
 
-            if (MetadataConflictDetector.Detect(metadata).Length == 0)
+            if (MetadataConflictDetector.Detect(metadata, file.FullPath).Length == 0)
             {
                 // Settled between opening the warning and getting here.
                 CheckStatus = "This file's metadata and its sidecar now agree.";
@@ -450,7 +450,7 @@ public sealed partial class ChangesViewModel : ObservableObject
             foreach (var file in Scope)
             {
                 if (read.TryGetValue(file.FullPath, out var metadata)
-                    && MetadataConflictDetector.Detect(metadata).Length > 0)
+                    && MetadataConflictDetector.Detect(metadata, file.FullPath).Length > 0)
                 {
                     Conflicts.Add(new ConflictedFileViewModel(file, metadata, new MediaItemViewModel(file, _thumbnails), FolderOf(file)));
                 }

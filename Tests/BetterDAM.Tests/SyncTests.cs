@@ -305,6 +305,39 @@ public class SyncServiceTests
         Assert.Equal(0, fixture.Store.Count);
     }
 
+    /// <summary>
+    /// The sidecar is the record for a proprietary raw file, and nothing writes into the file. Asking
+    /// Sync to embed must not make an exception of that.
+    /// </summary>
+    [Fact]
+    public async Task A_proprietary_raw_file_is_never_embedded_into()
+    {
+        if (!RealExifTool.IsAvailable)
+        {
+            return;
+        }
+
+        await using var fixture = new Fixture();
+
+        // A JPEG named as a CR2 is enough: the decision is made on the extension, and this keeps the
+        // test from needing a real raw file to prove the file is left untouched.
+        var raw = fixture.CreateJpeg("IMG100.cr2");
+        var before = await File.ReadAllBytesAsync(raw.FullPath);
+
+        fixture.Store.Set(raw.FullPath, EditableMetadata.Empty, new EditableMetadata { Rating = 4 });
+
+        var options = new SyncOptions { EmbedMetadata = true };
+        var plan = await fixture.Service.PrepareAsync(options);
+        var result = await fixture.Service.ExecuteAsync(plan, options);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(SyncOutcome.SidecarWritten, item.Outcome);
+
+        // The record went beside it, and the file itself is byte for byte what it was.
+        Assert.True(File.Exists(Path.ChangeExtension(raw.FullPath, ".xmp")));
+        Assert.Equal(before, await File.ReadAllBytesAsync(raw.FullPath));
+    }
+
     [Fact]
     public async Task Conflicted_files_are_skipped_when_asked()
     {
@@ -316,13 +349,21 @@ public class SyncServiceTests
         await using var fixture = new Fixture();
         var file = fixture.CreateJpeg("IMG006.jpg");
 
-        // Embedded and sidecar disagree, which is exactly what a conflict is.
-        await fixture.Writer.WriteEmbeddedAsync(file, new EditableMetadata { Title = "From the file" },
-            new EmbedWriteOptions { BackupOriginal = false, ValidateAfterWrite = false });
+        // The sidecar first, then the file: a conflict is the file having changed *after* the
+        // sidecar, which is what says somebody else has been here. The other order is this
+        // application's own last word and settles nothing.
         await fixture.Writer.WriteSidecarAsync(
             MediaFile.FromFileInfo(new FileInfo(file.FullPath)),
             new EditableMetadata { Title = "From the sidecar" },
             new SidecarWriteOptions { ValidateAfterWrite = false });
+
+        await fixture.Writer.WriteEmbeddedAsync(file, new EditableMetadata { Title = "From the file" },
+            new EmbedWriteOptions { BackupOriginal = false, ValidateAfterWrite = false });
+
+        // This application preserves the file's timestamp when it embeds, so its own writes never
+        // look like somebody else's. An outside editor does not, and that is what is being staged
+        // here: the file touched after the sidecar was last written.
+        File.SetLastWriteTimeUtc(file.FullPath, DateTime.UtcNow.AddMinutes(1));
 
         var current = MediaFile.FromFileInfo(new FileInfo(file.FullPath));
         fixture.Store.Set(current.FullPath, EditableMetadata.Empty, new EditableMetadata { Rating = 2 });

@@ -6165,3 +6165,83 @@ Both views use compiled bindings with `x:DataType`, so every binding added here 
 time rather than at first open — which covers the markup, not the look.
 
 - `dotnet test` — **962/962 passing** (5 new).
+
+---
+
+## What counts as a conflict ✅
+
+Rating a RAF produced a conflict immediately. The cause turned out to be arithmetic rather than
+philosophy, and finding it changed the model around it.
+
+### Every camera writes a rating of zero
+
+```text
+Embedded Rating across 40 RAF files : {0: 40}
+.JPG {0: 25}   .CR2 {0: 25}   .dng (Lightroom) {0: 25}
+```
+
+Not some — all of them. `Rating = 0` means *unrated*, an absence written as a placeholder. The
+detector read it as a value, so the first star given to any file disagreed with the file it was given
+to. The application was flagging its own work, in every format. `MetadataDiff` already knew this and
+renders 0 as "Unrated"; the detector never got the same treatment.
+
+### A raw file disagreeing with its sidecar is the arrangement working
+
+Nothing writes into a CR2 or an NEF — not this application, and not Lightroom, Camera Raw or Bridge.
+For those formats the sidecar **is** the record and the file keeps whatever the camera gave it. There
+is no disagreement to report because there are not two authorities, only one.
+
+`IsRaw` was the wrong test for this: it includes `.dng`, and DNG is a container built to hold XMP that
+Adobe writes into directly. Exempting it would have quietly stopped stitched panoramas from ever
+syncing. The new `CanEmbedMetadata` names the nine proprietary formats instead.
+
+Sync now honours the same rule: asked to embed into a proprietary raw it writes the sidecar and leaves
+the file untouched, rather than making an exception of it.
+
+### A sidecar newer than its file is an override, not a disagreement
+
+The sharp problem with dropping provenance is that "the user rated this here" and "something else
+edited the file" are *the same state on disk*. A sidecar that disagrees with its file is the ordinary
+condition of every file this application has ever edited.
+
+The filesystem carries the answer. The sidecar being newer is this application's own last word;
+the **file** changing afterwards is somebody else, and that is the only case a person can usefully
+answer. `xmp:MetadataDate` where both sides carry it, because it moves only when metadata moves and a
+re-export or a rotation would shift a file timestamp without meaning anything; file timestamps as the
+fallback, which are always there.
+
+Unknown counts as changed. A missing timestamp should not silence a disagreement that may be real:
+the cost of asking is a question, the cost of staying quiet is a lost edit.
+
+Two details worth recording. Embedding here passes ExifTool's `-P`, so this application's own writes
+preserve the file's timestamp and can never masquerade as somebody else's — which is right, and which
+made a Sync test that wrote the file *second* stop reporting a conflict, correctly. And `-P` keeps
+only whole seconds, so ties happen; "after" is strict, and a tie stays quiet.
+
+### Measured on the real library
+
+Over 500 files carrying sidecars:
+
+| | flagged |
+|---|---|
+| before these rules | 14 |
+| after | 0 |
+
+All fourteen were the application arguing with itself. The detector still fires: a unit theory covers
+two genuine ratings disagreeing, and the Sync test now stages a real external edit by touching the
+file after the sidecar.
+
+### Wording
+
+The inspector said "embedded metadata" where the review said "in the file". Both now say **in the
+file** and **in the sidecar**, including the buttons, the tile badge's tooltip and the Sync warning.
+`Embedded` survives as a code identifier, where it is accurate.
+
+- `dotnet test` — **979/979 passing** (17 new).
+
+### Next
+
+Phase 2: detect conflicts in the indexer, which already reads every file, so badges appear without
+clicking and switching folders costs nothing; plus an action that scans and opens the review on
+everything found. Held until now deliberately — auto-surfacing the old definition would have lit up
+every rated RAF in the library.

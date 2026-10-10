@@ -754,7 +754,7 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
             RebuildRawTagGroups();
 
             Conflicts.Clear();
-            foreach (var conflict in MetadataConflictDetector.Detect(metadata))
+            foreach (var conflict in MetadataConflictDetector.Detect(metadata, item.File.FullPath))
             {
                 Conflicts.Add(conflict);
             }
