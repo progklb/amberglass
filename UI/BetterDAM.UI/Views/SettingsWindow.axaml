@@ -523,6 +523,7 @@
                         <TextBox Text="{Binding Name}" Classes="compact" FontSize="12"
                                  Background="Transparent" BorderThickness="0"
                                  AttachedToVisualTree="OnKeywordNameShown"
+                                 KeyDown="OnKeywordNameKey"
                                  LostFocus="OnKeywordNameCommitted" />
                       </DockPanel>
                     </TreeDataTemplate>

@@ -96,6 +96,27 @@ public partial class SettingsWindow : Window
         });
     }
 
+    /// <summary>
+    /// Enter finishes the name, and goes no further.
+    ///
+    /// A single-line TextBox does not use the key, so it carried on up to the tree, which took it
+    /// as a key for the row and shut the group the keyword had just been added to — naming a new
+    /// keyword made it disappear from view at the very moment it was named. Nothing else in this
+    /// list wants Enter, so the box keeps it, and does on Enter what it does on losing focus.
+    /// </summary>
+    private void OnKeywordNameKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter ||
+            sender is not Control { DataContext: KeywordNodeViewModel node } ||
+            DataContext is not SettingsViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.Keywords.SortSiblingsOf(node);
+        e.Handled = true;
+    }
+
     /// <summary>Re-sorts a keyword's level once its name has finished being edited.</summary>
     private void OnKeywordNameCommitted(object? sender, RoutedEventArgs e)
     {

@@ -6368,3 +6368,17 @@ restored byte-identically afterwards:
   it.
 
 - `dotnet test` — **996/996 passing** (8 new).
+
+### Enter belongs to the box, not the tree ✅
+
+Naming a new keyword and pressing Enter shut the group it had just been added to, taking the new
+keyword out of view at the moment of naming it.
+
+A single-line TextBox does not use Enter, so the key carried on up to the TreeView, which took it as
+a key for the row. Blurring by clicking another row sorted the new keyword into place and left the
+group open, which is what pinned it on Enter rather than on the sort: the box now keeps the key and
+does on Enter what it does on losing focus.
+
+Verified in the application against the real keyword library — group still open, the keyword sorted
+into place, the caret still in the box — with the library and settings restored byte-identically
+afterwards and the pending change in the journal left alone.
