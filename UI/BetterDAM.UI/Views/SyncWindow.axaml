@@ -116,7 +116,7 @@
             <TextBlock FontWeight="SemiBold" FontSize="12"
                        Text="{Binding ConflictCount, StringFormat='⚠ {0:N0} file(s) have conflicting metadata'}" />
             <TextBlock Classes="hint"
-                       Text="Their embedded metadata disagrees with their XMP sidecar. Resolve the conflict in the inspector, or let Sync skip them." />
+                       Text="The values in these files disagree with the values in their XMP sidecars. Settle it in the inspector or the review, or let Sync skip them." />
             <CheckBox Content="Skip conflicted files" IsChecked="{Binding SkipConflicted}" />
           </StackPanel>
         </Border>

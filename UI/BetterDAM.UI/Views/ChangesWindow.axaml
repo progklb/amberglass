@@ -213,7 +213,7 @@
                         IsVisible="{Binding IsChecking}" />
                 <Button Content="{Binding CheckLabel}" Command="{Binding CheckConflictsCommand}"
                         IsEnabled="{Binding !IsChecking}"
-                        ToolTip.Tip="Read every file currently shown in the grid and list those whose embedded metadata and sidecar disagree" />
+                        ToolTip.Tip="Read every file currently shown in the grid and list those whose own values disagree with their sidecar" />
               </StackPanel>
               <StackPanel Spacing="4" VerticalAlignment="Center">
                 <TextBlock Text="{Binding ConflictHeading}" Classes="heading" />

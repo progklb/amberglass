@@ -929,7 +929,7 @@
                         <TextBlock Text="● MODIFIED" FontSize="9" />
                       </Border>
                       <Border Background="#CCFF7043" CornerRadius="2" Padding="4,1"
-                              ToolTip.Tip="Embedded metadata and the XMP sidecar disagree"
+                              ToolTip.Tip="This file and its XMP sidecar disagree"
                               IsVisible="{Binding HasConflicts}">
                         <TextBlock Text="⚠ CONFLICT" FontSize="9" />
                       </Border>

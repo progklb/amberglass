@@ -118,7 +118,7 @@
                 Background="#26FF7043" BorderBrush="#66FF7043" BorderThickness="1"
                 CornerRadius="4" Padding="8,6">
           <StackPanel Spacing="6">
-            <TextBlock Text="⚠ Embedded metadata and the XMP sidecar disagree"
+            <TextBlock Text="⚠ This file and its XMP sidecar disagree"
                        FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
 
             <ItemsControl ItemsSource="{Binding Conflicts}">
@@ -129,9 +129,9 @@
                                VerticalAlignment="Top" />
                     <StackPanel Grid.Column="1">
                       <TextBlock FontSize="11" TextWrapping="Wrap"
-                                 Text="{Binding EmbeddedValue, StringFormat='embedded: {0}'}" />
+                                 Text="{Binding EmbeddedValue, StringFormat='in the file: {0}'}" />
                       <TextBlock FontSize="11" TextWrapping="Wrap" Opacity="0.85"
-                                 Text="{Binding SidecarValue, StringFormat='sidecar: {0}'}" />
+                                 Text="{Binding SidecarValue, StringFormat='in the sidecar: {0}'}" />
                     </StackPanel>
                   </Grid>
                 </DataTemplate>
@@ -148,9 +148,9 @@
                     Command="{Binding CompareConflictsCommand}" />
 
             <StackPanel Orientation="Horizontal" Spacing="6">
-              <Button Content="Keep embedded" FontSize="11" Padding="8,2"
+              <Button Content="Keep the file's" FontSize="11" Padding="8,2"
                       Command="{Binding ResolveConflictsCommand}" CommandParameter="KeepEmbedded" />
-              <Button Content="Keep sidecar" FontSize="11" Padding="8,2"
+              <Button Content="Keep the sidecar's" FontSize="11" Padding="8,2"
                       Command="{Binding ResolveConflictsCommand}" CommandParameter="KeepSidecar" />
               <Button Content="Merge" FontSize="11" Padding="8,2"
                       ToolTip.Tip="Union the keywords; the sidecar wins for single-valued fields"
