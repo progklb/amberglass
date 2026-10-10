@@ -138,6 +138,15 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!--
+              Before the three answers, a way to see the question. The list above is cramped at this
+              width and says nothing about which value is the one currently in use.
+            -->
+            <Button Content="Compare side by side…" FontSize="11" Padding="8,2"
+                    HorizontalAlignment="Left"
+                    ToolTip.Tip="Open the review with this file's two readings laid out field by field"
+                    Command="{Binding CompareConflictsCommand}" />
+
             <StackPanel Orientation="Horizontal" Spacing="6">
               <Button Content="Keep embedded" FontSize="11" Padding="8,2"
                       Command="{Binding ResolveConflictsCommand}" CommandParameter="KeepEmbedded" />

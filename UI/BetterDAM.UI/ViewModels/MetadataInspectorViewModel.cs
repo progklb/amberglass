@@ -950,6 +950,28 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Raised when the user asks to see this file's two readings side by side before choosing. The
+    /// inspector is a narrow column; the comparison belongs where there is room for it.
+    /// </summary>
+    public event Action<MediaFile>? CompareConflictsRequested;
+
+    /// <summary>
+    /// Opens the review on this file's conflicts.
+    ///
+    /// The three buttons beside it settle the conflict in one click, which is right when the answer
+    /// is obvious. When it is not, the question is "what exactly differs, and which of these am I
+    /// looking at now" — and that needs more width than the inspector has.
+    /// </summary>
+    [RelayCommand]
+    private void CompareConflicts()
+    {
+        if (_item is not null)
+        {
+            CompareConflictsRequested?.Invoke(_item.File);
+        }
+    }
+
+    /// <summary>
     /// Settles the detected conflicts by recording the chosen values as a pending edit. Nothing is
     /// written to disk here — resolving a conflict is a decision, and committing it is a separate,
     /// explicit act.

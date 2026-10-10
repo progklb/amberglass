@@ -241,6 +241,92 @@ public class ChangesViewModelTests
         SidecarPath = "/ws/2025/a.xmp"
     };
 
+    // ---- Arriving from one file's warning -------------------------------------------------------
+
+    /// <summary>
+    /// The review used to be reachable only from the pending count, so a file that conflicted but
+    /// had no edits had no way in. Opening on one file must also not pay for the scan.
+    /// </summary>
+    [Fact]
+    public async Task OpeningOnOneFileShowsItsConflictsWithoutReadingTheRest()
+    {
+        var (review, _, _, provider) = Create();
+        provider.Data[A.FullPath] = Conflicting();
+        provider.Data[B.FullPath] = Conflicting();
+        review.FocusConflict = A;
+
+        await review.InitialiseAsync();
+
+        Assert.Equal(ChangesViewModel.ConflictsTab, review.SelectedTab);
+
+        var only = Assert.Single(review.Conflicts);
+        Assert.Equal(A.FullPath, only.File.FullPath);
+
+        // B is in scope and also conflicts, but was not asked about.
+        Assert.Equal(A.FullPath, review.SelectedConflict?.File.FullPath);
+    }
+
+    [Fact]
+    public async Task OpeningOnOneFileSurfacesBothSidesOfEveryFieldThatDisagrees()
+    {
+        var (review, _, _, provider) = Create();
+        provider.Data[A.FullPath] = Conflicting();
+        review.FocusConflict = A;
+
+        await review.InitialiseAsync();
+
+        var conflict = Assert.Single(review.SelectedConflict!.Conflicts);
+        Assert.Equal(MetadataConflictDetector.TitleField, conflict.Field);
+        Assert.Equal("In the file", conflict.EmbeddedValue);
+        Assert.Equal("In the sidecar", conflict.SidecarValue);
+    }
+
+    /// <summary>Settled between opening the warning and arriving here.</summary>
+    [Fact]
+    public async Task OpeningOnAFileThatNoLongerDisagreesSaysSoRatherThanShowingNothing()
+    {
+        var (review, _, _, provider) = Create();
+        provider.Data[A.FullPath] = new MediaMetadata
+        {
+            Embedded = new EditableMetadata { Title = "Same" },
+            Sidecar = new EditableMetadata { Title = "Same" }
+        };
+        review.FocusConflict = A;
+
+        await review.InitialiseAsync();
+
+        Assert.Empty(review.Conflicts);
+        Assert.False(review.HasConflicts);
+        Assert.NotNull(review.CheckStatus);
+    }
+
+    [Fact]
+    public async Task OpeningWithoutAFocusLeavesTheReviewOnTheChangesTab()
+    {
+        var (review, _, _, provider) = Create();
+        provider.Data[A.FullPath] = Conflicting();
+
+        await review.InitialiseAsync();
+
+        Assert.Equal(0, review.SelectedTab);
+        Assert.Empty(review.Conflicts);
+    }
+
+    /// <summary>The focused file can be settled from here exactly as a scanned one can.</summary>
+    [Fact]
+    public async Task AFocusedConflictCanBeSettledInPlace()
+    {
+        var (review, store, _, provider) = Create();
+        provider.Data[A.FullPath] = Conflicting();
+        review.FocusConflict = A;
+
+        await review.InitialiseAsync();
+        review.ResolveCommand.Execute("KeepEmbedded");
+
+        Assert.Empty(review.Conflicts);
+        Assert.True(store.HasChanges(A.FullPath));
+    }
+
     [Fact]
     public async Task CheckListsOnlyTheFilesWhoseLayersDisagree()
     {

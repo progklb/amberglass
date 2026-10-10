@@ -154,6 +154,69 @@ public sealed partial class ChangesViewModel : ObservableObject
     /// </summary>
     public bool IsQuitPrompt { get; set; }
 
+    /// <summary>
+    /// A file to open straight onto, when the review was reached from that file's conflict warning
+    /// rather than from the pending count. Set by the caller before the window is shown.
+    /// </summary>
+    public MediaFile? FocusConflict { get; set; }
+
+    /// <summary>Which tab the window opens on. 0 is Changes, 1 is Conflicts.</summary>
+    [ObservableProperty]
+    private int _selectedTab;
+
+    /// <summary>
+    /// Opens on the one file that was asked about, without the scan.
+    ///
+    /// The conflict check reads every file in scope, which on a large folder is a minute. Arriving
+    /// from one file's warning is a question about that file, so it is answered by reading that
+    /// file — and the scan is still there for the broader question.
+    /// </summary>
+    public async Task InitialiseAsync(CancellationToken cancellationToken = default)
+    {
+        if (FocusConflict is not { } file)
+        {
+            return;
+        }
+
+        SelectedTab = ConflictsTab;
+
+        try
+        {
+            if (await _metadata.ReadAsync(file, cancellationToken).ConfigureAwait(true) is not { } metadata)
+            {
+                return;
+            }
+
+            if (MetadataConflictDetector.Detect(metadata).Length == 0)
+            {
+                // Settled between opening the warning and getting here.
+                CheckStatus = "This file's metadata and its sidecar now agree.";
+                HasChecked = true;
+                return;
+            }
+
+            Conflicts.Clear();
+            Conflicts.Add(new ConflictedFileViewModel(
+                file, metadata, new MediaItemViewModel(file, _thumbnails), FolderOf(file)));
+
+            SelectedConflict = Conflicts[0];
+            HasChecked = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not read {File} for its conflicts", file.FullPath);
+            CheckStatus = ex.Message;
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(HasConflicts));
+            OnPropertyChanged(nameof(ConflictHeading));
+        }
+    }
+
+    /// <summary>The index of the Conflicts tab, named rather than written as a bare 1 at call sites.</summary>
+    public const int ConflictsTab = 1;
+
     public string QuitBanner => Files.Count == 1
         ? "You are quitting with 1 unsaved change. Pending edits are kept in memory and will be lost."
         : $"You are quitting with {Files.Count:N0} unsaved changes. Pending edits are kept in memory and will be lost.";

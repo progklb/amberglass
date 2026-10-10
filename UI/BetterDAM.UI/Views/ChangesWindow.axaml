@@ -72,7 +72,7 @@
       </DockPanel>
     </Border>
 
-    <TabControl Padding="0">
+    <TabControl Padding="0" SelectedIndex="{Binding SelectedTab}">
 
       <!-- ============================================================ Changes -->
       <TabItem Header="Changes">
@@ -279,7 +279,13 @@
                   <Grid ColumnDefinitions="110,*,*" Margin="0,6,0,0">
                     <TextBlock Grid.Column="0" Text="FIELD" Classes="column" />
                     <TextBlock Grid.Column="1" Text="IN THE FILE" Classes="column" />
-                    <TextBlock Grid.Column="2" Text="IN THE SIDECAR" Classes="column" />
+                    <!--
+                      Named as the one in use because that is the fact the decision turns on: the
+                      sidecar is laid over the file's own values, so its side is what the inspector
+                      shows, what search matches, and what "keep the sidecar" would preserve.
+                    -->
+                    <TextBlock Grid.Column="2" Text="IN THE SIDECAR — IN USE NOW" Classes="column"
+                               Foreground="#5CB8F5" />
                   </Grid>
 
                   <ItemsControl ItemsSource="{Binding Conflicts}">
@@ -289,8 +295,9 @@
                           <Grid ColumnDefinitions="110,*,*">
                             <TextBlock Grid.Column="0" Text="{Binding Field}" FontSize="12" Opacity="0.7" />
                             <TextBlock Grid.Column="1" Text="{Binding EmbeddedValue}" Classes="now" FontSize="12"
-                                       Margin="0,0,12,0" />
-                            <TextBlock Grid.Column="2" Text="{Binding SidecarValue}" Classes="now" FontSize="12" />
+                                       Margin="0,0,12,0" Opacity="0.6" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="2" Text="{Binding SidecarValue}" Classes="now" FontSize="12"
+                                       TextWrapping="Wrap" />
                           </Grid>
                         </Border>
                       </DataTemplate>
@@ -300,14 +307,20 @@
                   <!-- Settling is a decision, recorded as a pending change; writing is separate. -->
                   <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
                     <Button Content="Keep the file's values"
+                            ToolTip.Tip="Take the left column. Fields the sidecar alone supplies are kept."
                             Command="{Binding $parent[Window].((vm:ChangesViewModel)DataContext).ResolveCommand}"
                             CommandParameter="KeepEmbedded" />
                     <Button Content="Keep the sidecar's values"
+                            ToolTip.Tip="Take the right column, which is what you are seeing now. Nothing visibly changes; the disagreement is recorded as settled."
                             Command="{Binding $parent[Window].((vm:ChangesViewModel)DataContext).ResolveCommand}"
                             CommandParameter="KeepSidecar" />
+                    <Button Content="Merge"
+                            ToolTip.Tip="Union the keywords from both sides; for every other field the sidecar wins."
+                            Command="{Binding $parent[Window].((vm:ChangesViewModel)DataContext).ResolveCommand}"
+                            CommandParameter="Merge" />
                   </StackPanel>
                   <TextBlock Classes="hint"
-                             Text="Either choice becomes a pending change on the Changes tab. Nothing is written until you write it." />
+                             Text="Whichever you choose becomes a pending change on the Changes tab; nothing is written until you write it. Writing updates the sidecar only — the copy inside the media file changes during Sync, so this file may keep showing a conflict until then." />
 
                 </StackPanel>
               </ScrollViewer>

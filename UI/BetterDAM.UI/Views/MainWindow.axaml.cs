@@ -72,6 +72,9 @@ public partial class MainWindow : Window
 
             viewModel.ScrollSelectionIntoView -= OnScrollSelectionIntoView;
             viewModel.ScrollSelectionIntoView += OnScrollSelectionIntoView;
+
+            viewModel.Inspector.CompareConflictsRequested -= OnCompareConflicts;
+            viewModel.Inspector.CompareConflictsRequested += OnCompareConflicts;
             ApplyFilmstripLayout(viewModel.Filmstrip);
 
             // Frames are pushed rather than bound: a binding would mean allocating a bitmap per
@@ -135,13 +138,20 @@ public partial class MainWindow : Window
     private void OnOpenChanges(object? sender, RoutedEventArgs e) => _ = ReviewChangesAsync(quitting: false);
 
     /// <summary>
+    /// The inspector's conflict warning asking for the comparison. Reachable whether or not anything
+    /// is pending — until now the review could only be opened from the pending count, so a file that
+    /// conflicted but had no edits had no way in at all.
+    /// </summary>
+    private void OnCompareConflicts(MediaFile file) => _ = ReviewChangesAsync(quitting: false, file);
+
+    /// <summary>
     /// Opens the review of pending changes and, when it closes, brings the grid up to date with
     /// whatever was written or discarded there.
     ///
     /// Returns true only when the review was opened because the window was closing and the user
     /// chose to quit regardless — the one answer <see cref="OnClosing"/> needs.
     /// </summary>
-    private async Task<bool> ReviewChangesAsync(bool quitting)
+    private async Task<bool> ReviewChangesAsync(bool quitting, MediaFile? focusConflict = null)
     {
         if (ChangesViewModelFactory is not { } factory || DataContext is not MainWindowViewModel viewModel)
         {
@@ -152,6 +162,11 @@ public partial class MainWindow : Window
         review.WorkspacePath = viewModel.WorkspacePath;
         review.Scope = viewModel.MediaItems.Select(item => item.File).ToList();
         review.IsQuitPrompt = quitting;
+        review.FocusConflict = focusConflict;
+
+        // Started rather than awaited: it reads one file, and the window should be up while that
+        // happens rather than after it. It reports its own failures into the view model.
+        _ = review.InitialiseAsync();
 
         var quitAnyway = await new ChangesWindow { DataContext = review }.ShowDialog<bool>(this);
 

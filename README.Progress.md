@@ -6114,3 +6114,54 @@ One of the new batch tests from the previous change turned out to be flaky and w
 counted `betterdam-preview-*` folders in the system temp directory, which measures every other test
 extracting at the same time as much as its own. It now asks whether *this* file's extraction is still
 on disk.
+
+---
+
+## Seeing a conflict before choosing what to do about it ✅
+
+The inspector's conflict warning listed both readings already, but it was a column 300px wide showing
+11px text, and it never said which of the two values was the one being used. The review had a
+Conflicts tab laid out properly — and no way to reach it for the file in question.
+
+### The gap was the route, not the display
+
+The review opens from the pending count in the status bar, and that count only appears when something
+is pending. A file whose two layers disagreed but which had no edits had **no way into the comparison
+at all**; the only thing on offer was three buttons and a warning triangle.
+
+So the warning now carries a **Compare side by side…** button, which opens the review on that file's
+conflicts. Reachable whether or not anything is pending.
+
+### Opening on one file does not pay for the scan
+
+The Conflicts tab's check reads every file in scope, which on a large folder is a minute of ExifTool.
+Arriving from one file's warning is a question about that file, so it is answered by reading that
+file. The scan stays for the broader question. A conflict settled between opening the warning and
+arriving says so, rather than showing an empty list.
+
+### Saying which side is in use
+
+`Effective` is `Embedded.MergeWith(Sidecar)`, so the sidecar is laid over the file's own values and
+its side is what the inspector shows, what search matches, and what the grid badges. That is the fact
+the decision turns on and it was the one thing the table did not say. The sidecar column is now
+labelled **IN USE NOW** and the file's column is dimmed, so which is which reads at a glance rather
+than from memory.
+
+**Merge** is on the tab too. It existed in the model and in the inspector but not here, which made the
+review the weaker of the two places to settle a conflict while being the one with room to think.
+
+Values wrap now. A long description was being clipped by a column that had space to grow downward.
+
+### Verified
+
+By test: opening on one file lists only that file and lands on the Conflicts tab; both sides of every
+disagreeing field come through; a file that no longer disagrees reports it; opening without a focus
+leaves the review on Changes; and a focused conflict settles in place, recording a pending change.
+
+The new UI itself was **not** confirmed on screen this time. Synthetic mouse input no longer reaches
+the window without an accessibility grant, and the button needs a click; the run got as far as
+searching, and the filmstrip checkbox was seen rendering correctly in View options on the way past.
+Both views use compiled bindings with `x:DataType`, so every binding added here was resolved at build
+time rather than at first open — which covers the markup, not the look.
+
+- `dotnet test` — **962/962 passing** (5 new).
