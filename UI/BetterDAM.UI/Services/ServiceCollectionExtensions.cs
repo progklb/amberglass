@@ -77,7 +77,11 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<ExifToolHost>();
         services.AddSingleton<IMetadataProvider, ExifToolMetadataProvider>();
         services.AddSingleton<IMetadataWriter, ExifToolSidecarWriter>();
-        services.AddSingleton<IPendingChangeStore, PendingChangeStore>();
+        // The working tree outlives the session, so it is journalled to disk. Registered ahead of
+        // the store because the store replays it as it is constructed.
+        services.AddSingleton<PendingChangeJournal>();
+        services.AddSingleton<IPendingChangeStore>(sp =>
+            new PendingChangeStore(sp.GetRequiredService<PendingChangeJournal>()));
         services.AddSingleton<IBatchMetadataService, BatchMetadataService>();
         services.AddSingleton<ISyncService, SyncService>();
         services.AddSingleton<ICatalog, SqliteCatalog>();

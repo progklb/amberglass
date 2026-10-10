@@ -6245,3 +6245,62 @@ Phase 2: detect conflicts in the indexer, which already reads every file, so bad
 clicking and switching folders costs nothing; plus an action that scans and opens the review on
 everything found. Held until now deliberately — auto-surfacing the old definition would have lit up
 every rated RAF in the library.
+
+---
+
+## The working tree now survives the process ✅
+
+The application's thesis is that edits are held and flushed when the photographer chooses: make
+hundreds of judgements at speed, press Sync, walk away. That makes the staging area the most valuable
+thing in the application — hours of irreplaceable judgement, held for as long as suits.
+
+`PendingChangeStore` was a `ConcurrentDictionary`. Nothing on disk. The close guard covers *quitting*
+and nothing else: a crash, a kill, a forced restart or an overnight update took all of it silently.
+
+### A line per edit, appended
+
+`PendingChangeJournal` writes one JSON line per edit to `pending-changes.jsonl` in the application's
+data directory, and the store replays it as it is constructed. The shape is `SyncJournal`'s, for the
+same reason: appending one line is about as close to atomic as a filesystem gets, so an interruption
+leaves a readable journal rather than a half-rewritten document. A torn last line — the shape an
+interrupted write actually takes — costs that line and nothing before it.
+
+Not in the cache. The cache is disposable by design, and this is the one thing in the application
+that cannot be rebuilt from the files.
+
+The stream is held open and flushed per line. That survives the process dying, which is the case
+worth defending; a power cut can still lose the last line, and buying that back would mean an fsync
+per keystroke.
+
+**Not by writing sidecars instead.** That would make the staging durable for free, but it costs
+discard-without-a-trace, scatters `.xmp` files over every file merely touched, and puts disk work back
+on every edit — which is the slowness the whole model exists to avoid. The staging is persisted; the
+output is not.
+
+### Restoring compacts
+
+A long session rewrites the same file many times. Replaying on startup rewrites the journal holding
+only what survived, so it is bounded by what is actually pending rather than by how much editing has
+been done — and startup is the one moment nothing else is writing. Discarding everything compacts to
+nothing the same way.
+
+### What the live run caught
+
+The first run restored correctly — `Restored 2 pending change(s) from the journal` — and the status
+bar showed nothing at all. `PendingChangeCount` was only ever assigned from the store's `Changed`
+event, which was sound while the store always started empty. Restored edits raise no event, because
+they were not made now. A session's recovered work was there and invisible.
+
+Verified afterwards in the application: `● 2 file(s) with pending changes` with its three buttons,
+from a journal planted before launch. The planted entries pointed at paths that do not exist, so
+nothing of the user's could be touched by the test, and the journal was removed afterwards.
+
+- `dotnet test` — **988/988 passing** (9 new: what survives a process that does not close politely,
+  that both sides of an edit come back, discard and discard-all, an edit undone by hand, a torn last
+  line, compaction, and the memory-only store still behaving as it did).
+
+### Next
+
+The other two from the same thread: a count of files whose metadata is written but not yet *in* the
+file — the "why can't Lightroom see my tags" state, now free to compute from the metadata timestamps
+— and making Sync non-modal so walking away from it is real.

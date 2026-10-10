@@ -98,6 +98,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             RedrawMarksFor(e.FilePath);
         };
 
+        // The store is no longer always empty at startup: it restores the working tree from its
+        // journal, and those edits raise no event because they were not made now. Without this the
+        // count stayed at nought until the next edit, and a session's recovered work was invisible.
+        PendingChangeCount = _pending.Count;
+
         // Driven off the collection itself rather than the four places that mutate it, so neither
         // the prompt nor the stacks can drift out of step with what is actually on screen. The
         // grid only ever appends to this collection or clears it, which is the whole of what this

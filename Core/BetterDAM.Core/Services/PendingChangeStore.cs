@@ -8,6 +8,23 @@ public sealed class PendingChangeStore : IPendingChangeStore
 {
     private readonly ConcurrentDictionary<string, PendingChange> _changes = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Where the working tree is kept so it survives the application dying. Optional: without one
+    /// the store is memory-only, which is what a test wants and what the store was until edits
+    /// started living long enough to be worth losing.
+    /// </summary>
+    private readonly PendingChangeJournal? _journal;
+
+    public PendingChangeStore(PendingChangeJournal? journal = null)
+    {
+        _journal = journal;
+
+        foreach (var change in journal?.Restore() ?? [])
+        {
+            _changes[change.FilePath] = change;
+        }
+    }
+
     public int Count => _changes.Count;
 
     public event EventHandler<PendingChangesChangedEventArgs>? Changed;
@@ -20,7 +37,9 @@ public sealed class PendingChangeStore : IPendingChangeStore
             return;
         }
 
-        _changes[filePath] = new PendingChange(filePath, original, edited);
+        var change = new PendingChange(filePath, original, edited);
+        _changes[filePath] = change;
+        _journal?.RecordSet(change);
         Changed?.Invoke(this, new PendingChangesChangedEventArgs(filePath));
     }
 
@@ -33,6 +52,7 @@ public sealed class PendingChangeStore : IPendingChangeStore
     {
         if (_changes.TryRemove(filePath, out _))
         {
+            _journal?.RecordDiscard(filePath);
             Changed?.Invoke(this, new PendingChangesChangedEventArgs(filePath));
         }
     }
@@ -45,6 +65,10 @@ public sealed class PendingChangeStore : IPendingChangeStore
         }
 
         _changes.Clear();
+
+        // Rewritten rather than a discard per path: this is the one operation that empties the tree,
+        // and compacting here is what keeps the journal from growing across a long session.
+        _journal?.Compact([]);
         Changed?.Invoke(this, new PendingChangesChangedEventArgs(null));
     }
 
