@@ -313,6 +313,73 @@ public class MetadataInspectorViewModelTests
         Assert.False(inspector.WriteFailed);
     }
 
+    /// <summary>
+    /// The grid draws the pending change until the write, and the catalog's reading of the file is
+    /// from before the edit — so what was written has to be announced, or a rated raw file loses its
+    /// stars the moment it is saved and only gets them back when the folder is read again.
+    /// </summary>
+    [Fact]
+    public async Task What_was_written_is_announced()
+    {
+        var (inspector, _, _) = Create(MediaMetadata.Empty);
+        var announced = new List<(MediaFile File, EditableMetadata Written)>();
+
+        inspector.SidecarWritten += (file, written) => announced.Add((file, written));
+
+        await inspector.LoadAsync(Item());
+        inspector.Rating = 4;
+
+        await inspector.WriteSidecarCommand.ExecuteAsync(null);
+
+        var (file, metadata) = Assert.Single(announced);
+        Assert.Equal(FilePath, file.FullPath);
+        Assert.Equal(4, metadata.Rating);
+    }
+
+    [Fact]
+    public async Task Nothing_is_announced_when_the_write_fails()
+    {
+        var (inspector, _, writer) = Create(MediaMetadata.Empty);
+        writer.ShouldSucceed = false;
+        var announced = 0;
+
+        inspector.SidecarWritten += (_, _) => announced++;
+
+        await inspector.LoadAsync(Item());
+        inspector.Rating = 4;
+
+        await inspector.WriteSidecarCommand.ExecuteAsync(null);
+
+        // The grid is still right: the change is still pending, which is what it is drawing.
+        Assert.Equal(0, announced);
+    }
+
+    [Fact]
+    public async Task The_save_message_belongs_to_the_file_it_saved()
+    {
+        var (inspector, _, _) = Create(MediaMetadata.Empty);
+        await inspector.LoadAsync(Item());
+        inspector.Rating = 4;
+
+        await inspector.WriteSidecarCommand.ExecuteAsync(null);
+        Assert.NotNull(inspector.WriteStatus);
+
+        // Another file. The panel was still reporting "Saved to IMG001.xmp" beside it.
+        await inspector.LoadAsync(new MediaItemViewModel(
+            new MediaFile
+            {
+                FullPath = "/library/IMG002.jpg",
+                FileName = "IMG002.jpg",
+                MediaType = MediaType.Image,
+                SizeBytes = 1,
+                ModifiedUtc = DateTimeOffset.UnixEpoch,
+                CreatedUtc = DateTimeOffset.UnixEpoch
+            },
+            new StubThumbnailService()));
+
+        Assert.Null(inspector.WriteStatus);
+    }
+
     [Fact]
     public async Task A_failed_write_keeps_the_pending_change()
     {

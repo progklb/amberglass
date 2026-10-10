@@ -6304,3 +6304,67 @@ nothing of the user's could be touched by the test, and the journal was removed 
 The other two from the same thread: a count of files whose metadata is written but not yet *in* the
 file — the "why can't Lightroom see my tags" state, now free to compute from the metadata timestamps
 — and making Sync non-modal so walking away from it is real.
+
+## Stars that stayed, and two questions worth asking ✅
+
+Three things reported from use, two of them small and one a real bug.
+
+### The stars disappeared when the file was saved
+
+Rate a RAF four stars, watch the tile show four stars, press Write XMP sidecar — and the stars
+vanish. Leave the folder and come back and they are right again.
+
+The tile draws the pending change if there is one and the catalog's reading if there is not. Saving
+discards the pending change, which is correct — it is on disk now — and left only the catalog's
+reading, which was taken before the edit. So the tile fell back to what the file said before it was
+rated, which for a raw file straight out of a camera is nothing. Reopening the folder read the file
+again, sidecar included, and the stars came back.
+
+The panel writes one file's sidecar on its own and told nobody. It now says what it wrote, and the
+window does two things with that: puts the values straight into the marks the grid draws, so the
+tile is right in the same frame, and re-reads the file into the catalog, so a search run immediately
+after a save finds what was just saved. That second half was quietly broken too — the catalog went
+on answering with the pre-edit reading until something else made the folder be scanned.
+
+Write all sidecars had the same shape and was saved only by the re-index it already ran at the end;
+its tiles now hold their marks through the run rather than waiting for it.
+
+### Two bulk actions that acted on one click
+
+Write all sidecars and Discard all sit beside the count of pending changes, which is the one thing
+in that bar inviting a click, and Discard all throws away every unsaved judgement in the session
+with nothing to undo it. Both now ask, in place, the way the destructive buttons in Settings do:
+the question appears where the button was, with the count in it, so the answer is where the hand
+already is. Writing offers Write and Cancel; discarding offers Discard and Keep.
+
+### A new keyword is waiting to be named
+
+Adding a keyword or a group is always the first half of naming it, and it used to leave the caret
+nowhere: the row said "New keyword" and naming it meant clicking into the box and dragging across
+the placeholder first. The row now takes focus with its placeholder selected, so typing replaces it.
+
+Hung off the row appearing rather than done in the command, because the row does not exist when the
+command runs — the tree builds it on the next layout pass. The pending edit is *claimed* rather than
+read, so a row realised a second time, scrolled away and back or re-sorted, cannot take the caret
+back from wherever it has got to.
+
+### Also
+
+The panel reported the last save under the wrong file's name: "Saved to DSCF4730.xmp" sitting beside
+DSCF4731. The message is now cleared when the selected file changes, and kept when the same file is
+re-read, which is what happens immediately after a write.
+
+### Verified in the application
+
+On two raw files copied into a scratch folder, with the application's own data backed up and
+restored byte-identically afterwards:
+
+- a restored pending change showing four stars, written from the panel, tile keeping its stars and
+  gaining its XMP badge, and `Indexed 1 file(s)` in the log where there used to be nothing;
+- the catalog read back directly: `DSCF4730.RAF|4`, so a search would now find it;
+- `Discard the changes to 1 file(s)?` and `Write 1 file(s) to sidecars?` in the status bar, Keep
+  leaving the change alone and Write going through to the sidecar;
+- Add group and the row's + button both landing the caret on the placeholder, with typing replacing
+  it.
+
+- `dotnet test` — **996/996 passing** (8 new).

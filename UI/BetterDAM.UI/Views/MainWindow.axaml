@@ -639,19 +639,45 @@
             to see the changes themselves. A button dressed as text rather than one more button:
             the bar already has three.
           -->
-          <Button Classes="link" VerticalAlignment="Center" Click="OnOpenChanges"
-                  ToolTip.Tip="Review each change, before and after, and write or discard them a file at a time">
-            <TextBlock Foreground="#5CB8F5"
-                       Text="{Binding PendingChangeCount, StringFormat='● {0} file(s) with pending changes'}" />
-          </Button>
-          <Button Content="Write all sidecars" FontSize="11" Padding="8,2"
-                  ToolTip.Tip="Write every pending change to its XMP sidecar. Original media is not modified."
-                  IsEnabled="{Binding !IsWritingAll}"
-                  Command="{Binding WriteAllPendingSidecarsCommand}" />
-          <Button Content="Sync…" FontSize="11" Padding="8,2" Click="OnOpenSync"
-                  ToolTip.Tip="Review and commit pending changes, optionally embedding them into the originals" />
-          <Button Content="Discard all" FontSize="11" Padding="8,2"
-                  Command="{Binding DiscardAllPendingChangesCommand}" />
+          <StackPanel Orientation="Horizontal" Spacing="8"
+                      IsVisible="{Binding !IsConfirmingBulkAction}">
+            <Button Classes="link" VerticalAlignment="Center" Click="OnOpenChanges"
+                    ToolTip.Tip="Review each change, before and after, and write or discard them a file at a time">
+              <TextBlock Foreground="#5CB8F5"
+                         Text="{Binding PendingChangeCount, StringFormat='● {0} file(s) with pending changes'}" />
+            </Button>
+            <Button Content="Write all sidecars…" FontSize="11" Padding="8,2"
+                    ToolTip.Tip="Write every pending change to its XMP sidecar. Original media is not modified."
+                    IsEnabled="{Binding !IsWritingAll}"
+                    Command="{Binding BeginWriteAllCommand}" />
+            <Button Content="Sync…" FontSize="11" Padding="8,2" Click="OnOpenSync"
+                    ToolTip.Tip="Review and commit pending changes, optionally embedding them into the originals" />
+            <Button Content="Discard all…" FontSize="11" Padding="8,2"
+                    Command="{Binding BeginDiscardAllCommand}" />
+          </StackPanel>
+
+          <!--
+            Asked where the button was, as the destructive actions in Settings are. Both of these
+            act on every pending change at once and sit beside the count, which is the one thing in
+            this bar that invites a click — so either is a plausible miss, and discarding cannot be
+            undone.
+          -->
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsConfirmingWriteAll}">
+            <TextBlock Text="{Binding WriteAllPrompt}" VerticalAlignment="Center" FontSize="11" />
+            <Button Content="Write" FontSize="11" Padding="8,2"
+                    Command="{Binding WriteAllPendingSidecarsCommand}" />
+            <Button Content="Cancel" FontSize="11" Padding="8,2"
+                    Command="{Binding CancelBulkActionCommand}" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsConfirmingDiscardAll}">
+            <TextBlock Text="{Binding DiscardAllPrompt}" VerticalAlignment="Center" FontSize="11" />
+            <Button Content="Discard" FontSize="11" Padding="8,2"
+                    Background="#33FF6B6B" BorderBrush="#66FF6B6B"
+                    Command="{Binding DiscardAllPendingChangesCommand}" />
+            <Button Content="Keep" FontSize="11" Padding="8,2"
+                    Command="{Binding CancelBulkActionCommand}" />
+          </StackPanel>
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="10">
           <ProgressBar IsIndeterminate="True" Width="90" Height="4"

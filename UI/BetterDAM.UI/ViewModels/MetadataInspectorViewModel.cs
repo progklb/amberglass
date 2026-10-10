@@ -702,6 +702,15 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
             previous.Dispose();
         }
 
+        // Only when the file changes. Writing re-reads the same file, and that reload must not wipe
+        // the "Saved to …" line it was written to show. Selecting a different one must, though:
+        // the panel was reporting the previous file's save under the new file's name.
+        if (!string.Equals(_item?.File.FullPath, item?.File.FullPath, StringComparison.Ordinal))
+        {
+            WriteStatus = null;
+            WriteFailed = false;
+        }
+
         _item = item;
         HasItem = item is not null;
 
@@ -956,6 +965,16 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
     public event Action<MediaFile>? CompareConflictsRequested;
 
     /// <summary>
+    /// Raised once a sidecar has been written, with the values that went into it.
+    ///
+    /// The panel edits one file; the grid draws all of them, and the catalog answers searches about
+    /// all of them. Both were reading the pending change until this moment and have to be told what
+    /// replaced it — otherwise they go on showing what the catalog last read from disk, which is
+    /// the state before the edit that was just saved.
+    /// </summary>
+    public event Action<MediaFile, EditableMetadata>? SidecarWritten;
+
+    /// <summary>
     /// Opens the review on this file's conflicts.
     ///
     /// The three buttons beside it settle the conflict in one click, which is right when the answer
@@ -1018,6 +1037,11 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
                 _item.HasPendingChanges = false;
                 HasPendingChanges = false;
                 WriteStatus = $"Saved to {Path.GetFileName(result.SidecarPath)}";
+
+                // After the discard, deliberately: dropping the pending change is what leaves the
+                // grid with nothing but the catalog's older reading to draw, so this has to follow
+                // it to be the correction rather than be corrected by it.
+                SidecarWritten?.Invoke(_item.File, toWrite);
 
                 await LoadAsync(_item).ConfigureAwait(true);
             }

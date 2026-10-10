@@ -79,6 +79,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // right magnification before the develop has finished.
         Inspector.RawTags.CollectionChanged += (_, _) => OnPropertyChanged(nameof(LoupeTargetWidth));
 
+        // The panel writes one file's sidecar on its own; the grid and the catalog are the two
+        // places that were showing the pending change and now have to be told what replaced it.
+        Inspector.SidecarWritten += OnSidecarWritten;
+
         // A batch run marks many files at once; refresh whatever is on screen afterwards.
         // A batch run edits the pending store behind the inspector's back, so the panel has to be
         // told to re-read. Without this, pasting keywords onto the selected file left the old ones on
@@ -1682,12 +1686,71 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPendingChanges))]
+    [NotifyPropertyChangedFor(nameof(WriteAllPrompt))]
+    [NotifyPropertyChangedFor(nameof(DiscardAllPrompt))]
     private int _pendingChangeCount;
 
     public bool HasPendingChanges => PendingChangeCount > 0;
 
     [ObservableProperty]
     private bool _isWritingAll;
+
+    /// <summary>
+    /// Whether the status bar is asking about one of its two bulk actions.
+    ///
+    /// Both sit next to the count of pending changes, which is the one thing in the bar worth
+    /// clicking, and "Discard all" throws away every unsaved judgement in the session with no way
+    /// back. Asked in place rather than in a dialog, as the destructive buttons in Settings do: the
+    /// question appears where the button was, so the answer is where the hand already is.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConfirmingBulkAction))]
+    private bool _isConfirmingWriteAll;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConfirmingBulkAction))]
+    private bool _isConfirmingDiscardAll;
+
+    public bool IsConfirmingBulkAction => IsConfirmingWriteAll || IsConfirmingDiscardAll;
+
+    public string WriteAllPrompt => $"Write {PendingChangeCount} file(s) to sidecars?";
+
+    public string DiscardAllPrompt => $"Discard the changes to {PendingChangeCount} file(s)?";
+
+    [RelayCommand]
+    private void BeginWriteAll()
+    {
+        IsConfirmingDiscardAll = false;
+        IsConfirmingWriteAll = true;
+    }
+
+    [RelayCommand]
+    private void BeginDiscardAll()
+    {
+        IsConfirmingWriteAll = false;
+        IsConfirmingDiscardAll = true;
+    }
+
+    [RelayCommand]
+    private void CancelBulkAction()
+    {
+        IsConfirmingWriteAll = false;
+        IsConfirmingDiscardAll = false;
+    }
+
+    /// <summary>
+    /// A question about changes that no longer exist has no answer. Writing the last one from the
+    /// inspector while the bar was asking would otherwise leave the question waiting to reappear
+    /// over the next edit.
+    /// </summary>
+    partial void OnPendingChangeCountChanged(int value)
+    {
+        if (value == 0)
+        {
+            IsConfirmingWriteAll = false;
+            IsConfirmingDiscardAll = false;
+        }
+    }
 
     /// <summary>
     /// Shown over the grid whenever it has nothing in it. There are three quite different reasons
@@ -1763,6 +1826,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task WriteAllPendingSidecarsAsync()
     {
+        IsConfirmingWriteAll = false;
+
         if (!_writer.IsAvailable || _pending.Count == 0)
         {
             return;
@@ -1790,6 +1855,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 var result = await _writer.WriteSidecarAsync(item.File, change.Edited, new SidecarWriteOptions());
                 if (result.Success)
                 {
+                    // Before the discard: dropping the change is what sends the tile back to the
+                    // catalog's older reading, and the re-index that would correct it is minutes of
+                    // files away.
+                    _catalogMarks[change.FilePath] = new MediaMarks(
+                        change.Edited.Rating,
+                        change.Edited.Flag ?? MediaFlag.None,
+                        change.Edited.Label);
+
                     _pending.Discard(change.FilePath);
                     item.HasPendingChanges = false;
                     item.HasSidecar = true;
@@ -1844,8 +1917,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             // The listed files may span the whole catalog when showing search results, so the scope
             // is the workspace rather than the folder being browsed.
-            _catalogMarks = await _catalog.GetMarksAsync(SearchEverywhere ? null : WorkspacePath)
-                .ConfigureAwait(true);
+            // Copied rather than held as returned: a save updates the entry for the file it wrote,
+            // which is then the saved value for as long as this reading stands.
+            _catalogMarks = new Dictionary<string, MediaMarks>(
+                await _catalog.GetMarksAsync(SearchEverywhere ? null : WorkspacePath).ConfigureAwait(true),
+                StringComparer.OrdinalIgnoreCase);
 
             RedrawMarks();
         }
@@ -1860,7 +1936,28 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// What the catalog last said. Kept so an edit can be undone back to it: a discarded change has
     /// to reveal the saved value again, and re-querying for one tile would be absurd.
     /// </summary>
-    private IReadOnlyDictionary<string, MediaMarks> _catalogMarks = new Dictionary<string, MediaMarks>();
+    private Dictionary<string, MediaMarks> _catalogMarks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Takes in what a save has just put on disk: the tile it was saved from, and the catalog, which
+    /// answers searches about it.
+    ///
+    /// The panel discards the pending change once the sidecar is written, and until this the only
+    /// thing left to draw the tile from was the catalog's last reading — taken before the edit. So
+    /// rating a raw file and saving it made the stars vanish, and they came back on reopening the
+    /// folder, which is where the file is read again. The marks are corrected at once because the
+    /// tile is on screen now, and the file is re-read afterwards so the catalog agrees too: a search
+    /// run straight after a save should find what was saved.
+    /// </summary>
+    private void OnSidecarWritten(MediaFile file, EditableMetadata written)
+    {
+        _catalogMarks[file.FullPath] =
+            new MediaMarks(written.Rating, written.Flag ?? MediaFlag.None, written.Label);
+
+        RedrawMarksFor(file.FullPath);
+
+        _ = RunIndexAsync([file], CancellationToken.None);
+    }
 
     /// <summary>
     /// What a tile should show: the unsaved edit if there is one, otherwise what is on disk.
@@ -2038,6 +2135,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void DiscardAllPendingChanges()
     {
+        IsConfirmingDiscardAll = false;
+
         _pending.DiscardAll();
 
         foreach (var item in MediaItems)

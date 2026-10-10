@@ -339,6 +339,31 @@ public sealed partial class KeywordLibraryEditorViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// A keyword that has just been added and is still called "New group" or "New keyword".
+    ///
+    /// Adding one is always the first half of naming it, so its row should be waiting for the name
+    /// rather than for a click on the placeholder and then a drag across it. The view claims this
+    /// when the row appears, puts the caret in it and selects what is there, so typing replaces it.
+    /// </summary>
+    public KeywordNodeViewModel? AwaitingName { get; private set; }
+
+    /// <summary>
+    /// Takes the pending name edit, if it is for <paramref name="node"/>. Claimed rather than read
+    /// so a row that is realised twice — scrolled away and back, re-sorted — does not steal the
+    /// caret back from wherever it has got to since.
+    /// </summary>
+    public bool ClaimNameEdit(KeywordNodeViewModel node)
+    {
+        if (!ReferenceEquals(AwaitingName, node))
+        {
+            return false;
+        }
+
+        AwaitingName = null;
+        return true;
+    }
+
     [RelayCommand]
     private void AddGroup()
     {
@@ -346,6 +371,7 @@ public sealed partial class KeywordLibraryEditorViewModel : ObservableObject
         Add(Roots, node);
         Sort(Roots);
         Selected = node;
+        AwaitingName = node;
         Refresh();
     }
 
@@ -362,6 +388,7 @@ public sealed partial class KeywordLibraryEditorViewModel : ObservableObject
         Sort(parent.Children);
         parent.IsExpanded = true;
         Selected = node;
+        AwaitingName = node;
         Refresh();
     }
 

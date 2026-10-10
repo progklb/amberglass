@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
@@ -69,6 +70,31 @@ public partial class SettingsWindow : Window
     }
 
     private void OnClose(object? sender, RoutedEventArgs e) => Close();
+
+    /// <summary>
+    /// Puts the caret in a keyword that has just been added, with its placeholder name selected.
+    ///
+    /// Hung off the row appearing rather than done in the command, because the row does not exist
+    /// when the command runs — the tree builds it on the next layout pass. Focus is set one pass
+    /// later again: a control that has only just joined the tree has not been arranged yet, and
+    /// focusing it before it has a position does not take.
+    /// </summary>
+    private void OnKeywordNameShown(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is not TextBox box ||
+            box.DataContext is not KeywordNodeViewModel node ||
+            DataContext is not SettingsViewModel viewModel ||
+            !viewModel.Keywords.ClaimNameEdit(node))
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            box.Focus();
+            box.SelectAll();
+        });
+    }
 
     /// <summary>Re-sorts a keyword's level once its name has finished being edited.</summary>
     private void OnKeywordNameCommitted(object? sender, RoutedEventArgs e)

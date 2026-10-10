@@ -414,7 +414,7 @@ public class KeywordSortingTests
     private static KeywordLibraryEditorViewModel Editor(params string[] keywords)
         => new(
             new StubLibrary(KeywordLibrary.FromFlat(keywords)),
-            new StubCatalogForSorting(),
+            new StubKeywordCatalog(),
             NullLogger<KeywordLibraryEditorViewModel>.Instance);
 
     private static KeywordNodeViewModel Find(KeywordLibraryEditorViewModel editor, string name)
@@ -513,47 +513,113 @@ public class KeywordSortingTests
             ["Bush", "Calm"],
             editor.MoveTargets.Select(t => t.Label.Trim()).ToArray());
     }
+}
 
-    private sealed class StubLibrary(KeywordLibrary library) : IKeywordLibraryService
+internal sealed class StubLibrary(KeywordLibrary library) : IKeywordLibraryService
+{
+    public KeywordLibrary Current { get; private set; } = library;
+
+    public event EventHandler<KeywordLibrary>? Changed { add { } remove { } }
+
+    public Task SaveAsync(KeywordLibrary library, CancellationToken cancellationToken = default)
     {
-        public KeywordLibrary Current { get; private set; } = library;
+        Current = library;
+        return Task.CompletedTask;
+    }
+}
 
-        public event EventHandler<KeywordLibrary>? Changed { add { } remove { } }
+internal sealed class StubKeywordCatalog : ICatalog
+{
+    public Task<CatalogStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(CatalogStatistics.Empty);
 
-        public Task SaveAsync(KeywordLibrary library, CancellationToken cancellationToken = default)
-        {
-            Current = library;
-            return Task.CompletedTask;
-        }
+    public Task<IReadOnlyDictionary<string, MediaMarks>> GetMarksAsync(string? rootPath = null, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyDictionary<string, MediaMarks>>(new Dictionary<string, MediaMarks>());
+
+    public Task<IReadOnlyList<LabelUsage>> GetLabelsAsync(string? rootPath = null, CancellationToken cancellationToken = default)
+    => Task.FromResult<IReadOnlyList<LabelUsage>>([]);
+
+public Task<IReadOnlyList<KeywordUsage>> GetKeywordsAsync(string? rootPath = null, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<KeywordUsage>>([]);
+
+    public Task UpsertAsync(IReadOnlyList<CatalogEntry> entries, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    public Task<IReadOnlyDictionary<string, IndexedStamp>> GetIndexedStampsAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyDictionary<string, IndexedStamp>>(new Dictionary<string, IndexedStamp>());
+
+    public Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, string? rootPath = null, int limit = 5000, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<SearchHit>>([]);
+
+    public Task<int> RemoveMissingAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
+
+    public Task ClearAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Adding a keyword, which is always the first half of naming one.
+/// </summary>
+public class KeywordAddingTests
+{
+    private static KeywordLibraryEditorViewModel Editor(params string[] keywords)
+        => new(
+            new StubLibrary(KeywordLibrary.FromFlat(keywords)),
+            new StubKeywordCatalog(),
+            NullLogger<KeywordLibraryEditorViewModel>.Instance);
+
+    [Fact]
+    public void A_new_group_is_waiting_for_its_name()
+    {
+        var editor = Editor("Mood");
+
+        editor.AddGroupCommand.Execute(null);
+
+        var added = editor.Roots.Single(root => root.Name == "New group");
+        Assert.Same(added, editor.AwaitingName);
     }
 
-    private sealed class StubCatalogForSorting : ICatalog
+    [Fact]
+    public void A_new_keyword_is_waiting_for_its_name_too()
     {
-        public Task<CatalogStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(CatalogStatistics.Empty);
+        var editor = Editor("Mood");
+        var mood = editor.Roots.Single();
 
-        public Task<IReadOnlyDictionary<string, MediaMarks>> GetMarksAsync(string? rootPath = null, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyDictionary<string, MediaMarks>>(new Dictionary<string, MediaMarks>());
+        editor.AddChildCommand.Execute(mood);
 
-        public Task<IReadOnlyList<LabelUsage>> GetLabelsAsync(string? rootPath = null, CancellationToken cancellationToken = default)
-        => Task.FromResult<IReadOnlyList<LabelUsage>>([]);
-
-    public Task<IReadOnlyList<KeywordUsage>> GetKeywordsAsync(string? rootPath = null, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<KeywordUsage>>([]);
-
-        public Task UpsertAsync(IReadOnlyList<CatalogEntry> entries, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
-
-        public Task<IReadOnlyDictionary<string, IndexedStamp>> GetIndexedStampsAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyDictionary<string, IndexedStamp>>(new Dictionary<string, IndexedStamp>());
-
-        public Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, string? rootPath = null, int limit = 5000, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<SearchHit>>([]);
-
-        public Task<int> RemoveMissingAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
-
-        public Task ClearAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        Assert.Same(mood.Children.Single(), editor.AwaitingName);
     }
+
+    /// <summary>
+    /// Claimed once and only once. A row is realised again whenever it is scrolled away and back or
+    /// re-sorted, and a second claim would take the caret away from wherever it has got to by then.
+    /// </summary>
+    [Fact]
+    public void The_name_edit_is_claimed_once()
+    {
+        var editor = Editor();
+        editor.AddGroupCommand.Execute(null);
+
+        var added = editor.Roots.Single();
+
+        Assert.True(editor.ClaimNameEdit(added));
+        Assert.False(editor.ClaimNameEdit(added));
+        Assert.Null(editor.AwaitingName);
+    }
+
+    [Fact]
+    public void Another_keyword_cannot_claim_it()
+    {
+        var editor = Editor("Mood");
+        editor.AddGroupCommand.Execute(null);
+
+        Assert.False(editor.ClaimNameEdit(editor.Roots.Single(root => root.Name == "Mood")));
+        Assert.NotNull(editor.AwaitingName);
+    }
+
+    /// <summary>Nothing is waiting until something is added — the tree must not steal the caret.</summary>
+    [Fact]
+    public void A_loaded_library_is_waiting_for_nothing()
+        => Assert.Null(Editor("Mood|warm", "Subject|animal").AwaitingName);
 }
 
 /// <summary>
