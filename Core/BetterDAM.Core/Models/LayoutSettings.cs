@@ -16,7 +16,7 @@ public sealed record LayoutSettings
 {
     public static readonly LayoutSettings Default = new();
 
-    public const double MinThumbnailSize = 90;
+    public const double MinThumbnailSize = 64;
     public const double MaxThumbnailSize = 320;
 
     /// <summary>The widest a side panel may be left, so one cannot be dragged over the photographs.</summary>

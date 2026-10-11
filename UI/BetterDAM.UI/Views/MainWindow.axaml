@@ -76,6 +76,21 @@
     </Style>
 
     <!--
+      The tiles carry no padding of their own.
+
+      A ListBoxItem is sized for a row of text in a list, and the theme pads it accordingly: about
+      ten points a side, which on a grid of photographs is a gutter nobody asked for and a third of
+      the width of a small tile. The tile template says what space it wants - its own margin - and
+      this stops the item adding to it.
+    -->
+    <Style Selector="ListBox.tiles ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <!--
       The dividers beside the two side panels. A line while it divides two things; once the panel
       beside it is shut there is nothing to divide, so it stops drawing itself and leaves only the
       small handle in the middle of the edge. The strip is still there to drag, and still Transparent
@@ -189,7 +204,7 @@
                              FontSize="11" Opacity="0.5" VerticalAlignment="Center"
                              Text="{Binding ThumbnailSize, StringFormat='{}{0:F0} px'}" />
                 </DockPanel>
-                <Slider Minimum="90" Maximum="320" Value="{Binding ThumbnailSize}" />
+                <Slider Minimum="64" Maximum="320" Value="{Binding ThumbnailSize}" />
 
                 <CheckBox Content="Filmstrip" FontSize="11"
                           IsChecked="{Binding Filmstrip}"
@@ -910,6 +925,7 @@
 
         <ListBox x:Name="ThumbnailGrid"
                  Background="Transparent"
+                 Classes="tiles"
                  Classes.handDrawn="{DynamicResource AppRingEnabled}"
                  ItemsSource="{Binding VisibleItems}"
                  SelectedItem="{Binding SelectedItem}"
@@ -935,7 +951,7 @@
              -->
              <Panel>
               <StackPanel Width="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).ThumbnailSize}"
-                          Margin="4" Spacing="4"
+                          Margin="2" Spacing="2"
                           DoubleTapped="OnThumbnailDoubleTapped">
                 <StackPanel.ContextMenu>
                   <ContextMenu>
@@ -989,7 +1005,7 @@
                   <Panel>
                     <controls:LazyThumbnail Source="{Binding Thumbnail}"
                                             Stretch="Uniform"
-                                            Margin="3" />
+                                            Margin="1" />
                     <TextBlock Text="No preview"
                                FontSize="11" Opacity="0.5"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -1134,8 +1150,15 @@
                   </Panel>
                 </Border>
                 </Panel>
+                <!--
+                  Not in the filmstrip, where the strip's whole job is to be short and the name is
+                  already on the panel beside the picture it belongs to. In the grid it stays: a
+                  contact sheet is read by name as well as by picture.
+                -->
                 <TextBlock Text="{Binding FileName}" FontSize="11"
-                           TextTrimming="CharacterEllipsis" TextAlignment="Center" />
+                           TextTrimming="CharacterEllipsis" TextAlignment="Center"
+                           IsVisible="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).Filmstrip,
+                                       Converter={x:Static BoolConverters.Not}}" />
               </StackPanel>
 
               <controls:RoughMark Kind="Box" Margin="1"

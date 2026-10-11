@@ -6473,3 +6473,35 @@ before the panel goes, so that click returns it to exactly where it was.
 A click is a drag of no distance, with a pixel of slack so a hand that moved while the button was
 down does not count as one. Verified: click to shut, click the tab to open, both panels, widths
 kept — and an ordinary resize drag still resizes.
+
+### Tighter tiles ✅
+
+The filmstrip showed a fraction of what Lightroom's does at the same height. Most of it was not the
+tile design but a gutter nobody wrote: a ListBoxItem is sized for a row of text in a list, and the
+theme pads it about ten points a side. On a grid of photographs that is a third of the width of a
+small tile, paid on every one of them. The arithmetic reconciled with a screenshot before anything
+was changed — 90 for the picture, 15 for the caption, 4 for spacing, 8 for margins is 117, and the
+strip measured 145 with 120 between tile centres where the template asks for 98.
+
+Four changes, in order of what they recovered:
+
+- The item padding is gone, which is most of it.
+- The tile's own chrome came in: margin 4 to 2, the picture's inset 3 to 1, the gap 4 to 2.
+- No filename in the filmstrip. The strip's whole job is to be short, and the name is already on
+  the panel beside the picture. The grid keeps it: a contact sheet is read by name as well.
+- The size slider goes down to 64 rather than 90, so the strip can get genuinely small.
+
+Measured at the same window and the same thumbnail size, before and after:
+
+| | Pitch | Strip height |
+|---|---|---|
+| Before, at 90 | ~120pt | ~145pt |
+| After, at 90 | ~92pt | ~95pt |
+| After, at 64 | ~70pt | ~71pt |
+
+So about **1.7× more frames in the strip, in half the height**.
+
+The divider's floor had to learn the difference: a tile in the filmstrip has no caption, so the
+floor is the thumbnail plus five points there and plus twenty-one in the grid. A single figure
+would have left a band of empty strip under the pictures, or stopped the drag short of the mode it
+is meant to reach.

@@ -102,6 +102,9 @@ public partial class MainWindow : Window
         else if (e.PropertyName == nameof(MainWindowViewModel.Filmstrip)
                  && DataContext is MainWindowViewModel viewModel)
         {
+            // The floor before the layout: entering the filmstrip drops the caption from every
+            // tile, so the row may now be shorter than the floor the grid was holding it to.
+            ApplyPaneFloors();
             ApplyFilmstripLayout(viewModel.Filmstrip);
         }
         else if (e.PropertyName is nameof(MainWindowViewModel.IsFolderPanelVisible)
@@ -571,7 +574,8 @@ public partial class MainWindow : Window
 
         // Both rows every time: which one holds which pane changes, and a floor left on the row the
         // thumbnails have moved out of would pin the preview to a tile height.
-        ThumbnailRow().MinHeight = viewModel.ThumbnailSize + TileChrome;
+        ThumbnailRow().MinHeight = viewModel.ThumbnailSize
+                                   + (viewModel.Filmstrip ? FilmstripChrome : TileChrome);
         PreviewRow().MinHeight = PreviewFloor;
     }
 
@@ -656,10 +660,18 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Roughly what a tile adds to its thumbnail: the caption, the margins and the rebate. Only used
-    /// to decide when a drag has run out of room for a second row, so an approximation is enough.
+    /// Roughly what a tile adds to its thumbnail: its margins, the gap and the caption under it.
+    /// Used to decide when a drag has run out of room for a second row, so an approximation is
+    /// enough — but it has to be close, because it is also the floor the divider stops at.
     /// </summary>
-    private const double TileChrome = 40;
+    private const double TileChrome = 21;
+
+    /// <summary>
+    /// The same, for a tile in the filmstrip, which has no caption. Deliberately a shade under what
+    /// a tile really costs: the row measures itself from its content there, and a floor set above
+    /// that would show as a band of empty strip below the pictures.
+    /// </summary>
+    private const double FilmstripChrome = 5;
 
     private void OnPreviewDoubleTapped(object? sender, TappedEventArgs e) => OpenFullscreen();
 
