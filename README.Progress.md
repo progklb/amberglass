@@ -6461,3 +6461,15 @@ row the thumbnails moved out of, it would pin the preview to a tile height.
 
 Verified in both orientations: the drag stops with one row of tiles and their captions, nothing
 clipped, and the filmstrip comes on as the hand lets go.
+
+### One rule for the divider ✅
+
+Clicking a collapsed panel's tab already brought it back; clicking the divider now puts it away.
+Single click rather than double, because the gesture that brings a panel back is a single click on
+the same strip — two rules for one piece of chrome would be one too many, and it is the way
+Lightroom's panel edges work. An accidental one costs a click to undo, and the width is recorded
+before the panel goes, so that click returns it to exactly where it was.
+
+A click is a drag of no distance, with a pixel of slack so a hand that moved while the button was
+down does not count as one. Verified: click to shut, click the tab to open, both panels, widths
+kept — and an ordinary resize drag still resizes.

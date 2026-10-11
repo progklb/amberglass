@@ -185,6 +185,12 @@ public partial class MainWindow : Window
             ? FolderColumn().ActualWidth
             : InspectorColumn().ActualWidth;
 
+    /// <summary>
+    /// Whether the divider actually went anywhere. A click is a drag of no distance, and a pixel of
+    /// slack keeps a hand that moved while the button was down from counting as one.
+    /// </summary>
+    private bool Dragged(double width) => Math.Abs(width - _widthAtDragStart) > 1;
+
     private void OnFolderSplitterDragged(object? sender, VectorEventArgs e)
     {
         if (DataContext is MainWindowViewModel viewModel)
@@ -228,13 +234,23 @@ public partial class MainWindow : Window
             // Shut already, so this was the tab. Let go without moving and it opens at the width it
             // had, which is what a click on a tab should do; drag it out and it opens where it was
             // let go of, unless that is still too narrow to be worth anything.
-            var dragged = Math.Abs(width - _widthAtDragStart) > 1;
-            var target = dragged && width >= PanelCollapseThreshold ? width : rememberedWidth;
+            var target = Dragged(width) && width >= PanelCollapseThreshold ? width : rememberedWidth;
 
             // Recorded before the panel is marked open, because marking it open is what puts the
             // column back to the recorded width. The other way round would throw the drag away.
             rememberWidth(target);
             setOpen(true);
+            return;
+        }
+
+        // Let go without moving and the panel goes away, which is the same gesture that brings it
+        // back from the tab: one rule for the divider, click it to put the panel away and click it
+        // again to have it back. An accidental one costs a click to undo, and the width it had is
+        // recorded first so that click returns it to where it was.
+        if (!Dragged(width))
+        {
+            rememberWidth(width);
+            setOpen(false);
             return;
         }
 

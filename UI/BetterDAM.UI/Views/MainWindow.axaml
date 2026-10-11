@@ -847,7 +847,7 @@
                     ResizeDirection="Columns"
                     DragStarted="OnPanelSplitterDragStarted"
                     DragCompleted="OnFolderSplitterDragged"
-                    ToolTip.Tip="Drag to resize the folders panel; drag it shut to collapse it" />
+                    ToolTip.Tip="Drag to resize the folders panel, or click to put it away. Click again to bring it back." />
 
       <!-- Thumbnail grid over preview -->
       <!--
@@ -1270,7 +1270,7 @@
                     ResizeDirection="Columns"
                     DragStarted="OnPanelSplitterDragStarted"
                     DragCompleted="OnInspectorSplitterDragged"
-                    ToolTip.Tip="Drag to resize the metadata panel; drag it shut to collapse it" />
+                    ToolTip.Tip="Drag to resize the metadata panel, or click to put it away. Click again to bring it back." />
 
       <!-- Right panel: batch editor for a multi-selection, otherwise the single-file inspector -->
       <Panel Grid.Column="4" IsVisible="{Binding IsInspectorVisible}">
