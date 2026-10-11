@@ -138,6 +138,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _filmstrip = _settings.Current.Filmstrip;
         _stackShows = _settings.Current.StackShows;
 
+        // The window as it was left. Assigned to the fields rather than the properties so that
+        // restoring an arrangement does not count as changing it and write the file straight back.
+        _layout = _settings.Current.Layout;
+        _thumbnailSize = _layout.ClampedThumbnailSize;
+        _isFolderPanelVisible = !_layout.FolderPanelCollapsed;
+        _isInspectorVisible = !_layout.InspectorCollapsed;
+        _previewOnTop = _layout.PreviewOnTop;
+
         RecentWorkspaces = new ObservableCollection<string>(_settings.Current.RecentWorkspaces);
         _viewerOpensFullscreen = _settings.Current.ViewerOpensFullscreen;
         _developRawFiles = _settings.Current.DevelopRawFiles;
@@ -149,6 +157,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _noiseReduction = develop.NoiseReduction;
         _rawQuality = develop.Quality;
 
+        _contactSheet = _settings.Current.ContactSheet;
+
         RebuildLabelChips();
         _settings.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
         {
@@ -156,6 +166,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             // Recolouring a label in Settings has to reach the grid, which is drawing that colour.
             RedrawMarks();
+
+            // The dividers are a line normally and a film rebate under the contact sheet, and the
+            // view sets their width itself rather than binding it.
+            ContactSheet = _settings.Current.ContactSheet;
         });
 
         // Otherwise the kind toggles start unticked on an empty query, which reads as "showing
@@ -452,7 +466,89 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private bool _recursive = true;
 
     [ObservableProperty]
-    private double _thumbnailSize = 160;
+    private double _thumbnailSize = LayoutSettings.Default.ThumbnailSize;
+
+    partial void OnThumbnailSizeChanged(double value) => RememberLayout(l => l with { ThumbnailSize = value });
+
+    /// <summary>
+    /// The arrangement of the window as it stands, kept in step with what is on screen and written
+    /// out shortly afterwards.
+    ///
+    /// Held here rather than read back from settings each time because a drag changes it many times
+    /// a second: the record is updated as the panel moves, and the file is written once the hand
+    /// has stopped.
+    /// </summary>
+    private LayoutSettings _layout = LayoutSettings.Default;
+
+    private CancellationTokenSource? _layoutSaveCts;
+
+    /// <summary>
+    /// Long enough that dragging a splitter or a slider is one write rather than one per frame,
+    /// short enough that closing the window straight afterwards still catches it.
+    /// </summary>
+    private static readonly TimeSpan LayoutSaveDelay = TimeSpan.FromMilliseconds(400);
+
+    private void RememberLayout(Func<LayoutSettings, LayoutSettings> change)
+    {
+        var updated = change(_layout);
+        if (updated == _layout)
+        {
+            return;
+        }
+
+        _layout = updated;
+        ScheduleLayoutSave();
+    }
+
+    private void ScheduleLayoutSave()
+    {
+        _layoutSaveCts?.Cancel();
+        _layoutSaveCts?.Dispose();
+        _layoutSaveCts = new CancellationTokenSource();
+
+        var token = _layoutSaveCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(LayoutSaveDelay, token).ConfigureAwait(false);
+
+                // Read Current at the last moment: something else may have saved a different part
+                // of the settings while the hand was still moving.
+                await _settings.SaveAsync(_settings.Current with { Layout = _layout }).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // A window arrangement is not worth interrupting anyone over.
+                _logger.LogDebug(ex, "Could not save the layout");
+            }
+        }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Called by the view once a splitter has been let go, with what the drag actually left behind.
+    /// The view owns the widths — a binding would be fighting the splitter for them — so this is
+    /// the only way the state that gets saved can know what happened.
+    /// </summary>
+    public void RememberFolderPanelWidth(double width)
+        => RememberLayout(l => width > 0 ? l with { FolderPanelWidth = width } : l);
+
+    public void RememberInspectorWidth(double width)
+        => RememberLayout(l => width > 0 ? l with { InspectorWidth = width } : l);
+
+    public void RememberBottomPaneHeight(double height)
+        => RememberLayout(l => height > 0 ? l with { BottomPaneHeight = height } : l);
+
+    /// <summary>What the view should open the panels at, and put them back to after a collapse.</summary>
+    public double FolderPanelWidth => _layout.ClampedFolderPanelWidth;
+
+    public double InspectorWidth => _layout.ClampedInspectorWidth;
+
+    public double BottomPaneHeight => _layout.ClampedBottomPaneHeight;
 
     [ObservableProperty]
     private string? _currentFolderPath;
@@ -1611,15 +1707,60 @@ public sealed partial class MainWindowViewModel : ObservableObject
         => _ = _settings.SaveAsync(_settings.Current with { ViewerOpensFullscreen = value });
 
     /// <summary>
-    /// Collapses the folders panel so the thumbnails and preview get the whole window. Bound to the
-    /// column width rather than the tree's visibility: a hidden child of a fixed-width column would
-    /// leave the 240px gap behind.
+    /// Whether the folders panel is open. The column width follows in the view, which owns it: the
+    /// splitter writes to that width as it is dragged and a binding would be fighting it.
+    ///
+    /// Collapsing is the panel's width going to nothing, not the tree being hidden — a hidden child
+    /// of a fixed-width column would leave its gap behind.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FolderColumnWidth))]
     private bool _isFolderPanelVisible = true;
 
-    public GridLength FolderColumnWidth => IsFolderPanelVisible ? new GridLength(240) : new GridLength(0);
+    partial void OnIsFolderPanelVisibleChanged(bool value)
+        => RememberLayout(l => l with { FolderPanelCollapsed = !value });
+
+    /// <summary>
+    /// The same for the inspector. Worth collapsing for the same reason and more often: culling a
+    /// shoot needs the picture large and nothing else, and the panel is the widest thing competing
+    /// with it.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isInspectorVisible = true;
+
+    partial void OnIsInspectorVisibleChanged(bool value)
+        => RememberLayout(l => l with { InspectorCollapsed = !value });
+
+    /// <summary>
+    /// Whether the preview sits above the thumbnails rather than below them.
+    ///
+    /// Both readings are legitimate: thumbnails first is a contact sheet being worked through,
+    /// preview first is one photograph with the shoot underneath, which is how most editing
+    /// applications are laid out. Whichever is chosen is remembered.
+    /// </summary>
+    [ObservableProperty]
+    private bool _previewOnTop;
+
+    partial void OnPreviewOnTopChanged(bool value)
+    {
+        RememberLayout(l => l with { PreviewOnTop = value });
+
+        // The pane moved out from under the selection; put it back in sight.
+        if (SelectedItem is not null)
+        {
+            ScrollSelectionIntoView?.Invoke(SelectedItem);
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleInspectorPanel() => IsInspectorVisible = !IsInspectorVisible;
+
+    /// <summary>
+    /// Mirrors the contact sheet experiment, which is set in Settings. Only the dividers care: they
+    /// are a line normally and a film rebate under the contact sheet, and the view owns their width
+    /// rather than binding it to the resource.
+    /// </summary>
+    [ObservableProperty]
+    private bool _contactSheet;
 
     /// <summary>
     /// Moves the selection through the grid, for arrow-key browsing in the fullscreen viewer.

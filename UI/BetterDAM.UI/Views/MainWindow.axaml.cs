@@ -75,6 +75,12 @@ public partial class MainWindow : Window
 
             viewModel.Inspector.CompareConflictsRequested -= OnCompareConflicts;
             viewModel.Inspector.CompareConflictsRequested += OnCompareConflicts;
+
+            // Order matters: the panes have to be in the right rows before the filmstrip decides
+            // which row carries the star.
+            ApplyContentOrder(viewModel.PreviewOnTop);
+            ApplyPanelWidths(viewModel);
+            BottomRow().Height = new GridLength(viewModel.BottomPaneHeight);
             ApplyFilmstripLayout(viewModel.Filmstrip);
 
             // Frames are pushed rather than bound: a binding would mean allocating a bitmap per
@@ -97,6 +103,142 @@ public partial class MainWindow : Window
         {
             ApplyFilmstripLayout(viewModel.Filmstrip);
         }
+        else if (e.PropertyName is nameof(MainWindowViewModel.IsFolderPanelVisible)
+                     or nameof(MainWindowViewModel.IsInspectorVisible)
+                     or nameof(MainWindowViewModel.ContactSheet)
+                 && DataContext is MainWindowViewModel panels)
+        {
+            ApplyPanelWidths(panels);
+        }
+        else if (e.PropertyName == nameof(MainWindowViewModel.PreviewOnTop)
+                 && DataContext is MainWindowViewModel order)
+        {
+            ApplyContentOrder(order.PreviewOnTop);
+        }
+    }
+
+    // ---- Side panels --------------------------------------------------------------------------
+
+    /// <summary>
+    /// How wide the divider becomes once the panel beside it is shut.
+    ///
+    /// A line is enough to drag when it sits between two things. With nothing on one side of it
+    /// there is nothing to aim at, so it widens into a tab carrying an arrow — small enough to cost
+    /// the photographs nothing, large enough to hit without care.
+    /// </summary>
+    private const double CollapsedTabWidth = 14;
+
+    /// <summary>
+    /// Narrower than this and letting go of a panel shuts it.
+    ///
+    /// Below about this width the tree is a column of ellipses and the inspector cannot lay its
+    /// fields out, so the space is being paid for and used for nothing. Dragging a panel out of the
+    /// way is the obvious gesture for wanting rid of it, and this is what makes it mean that.
+    /// </summary>
+    private const double PanelCollapseThreshold = LayoutSettings.MinPanelWidth;
+
+    private ColumnDefinition FolderColumn() => LayoutColumns.ColumnDefinitions[0];
+
+    private ColumnDefinition FolderSplitterColumn() => LayoutColumns.ColumnDefinitions[1];
+
+    private ColumnDefinition InspectorSplitterColumn() => LayoutColumns.ColumnDefinitions[3];
+
+    private ColumnDefinition InspectorColumn() => LayoutColumns.ColumnDefinitions[4];
+
+    /// <summary>The divider width the theme asks for, which a film rebate makes wider than a line.</summary>
+    private double SplitterWidth()
+        => AppThemes.SplitterWidthFor((DataContext as MainWindowViewModel)?.ContactSheet ?? false);
+
+    private void ApplyPanelWidths(MainWindowViewModel viewModel)
+    {
+        FolderColumn().Width = viewModel.IsFolderPanelVisible
+            ? new GridLength(viewModel.FolderPanelWidth)
+            : new GridLength(0);
+
+        InspectorColumn().Width = viewModel.IsInspectorVisible
+            ? new GridLength(viewModel.InspectorWidth)
+            : new GridLength(0);
+
+        FolderSplitterColumn().Width = new GridLength(
+            viewModel.IsFolderPanelVisible ? SplitterWidth() : CollapsedTabWidth);
+
+        InspectorSplitterColumn().Width = new GridLength(
+            viewModel.IsInspectorVisible ? SplitterWidth() : CollapsedTabWidth);
+    }
+
+    /// <summary>
+    /// The width a panel had when the drag began, so that letting go without having moved can be
+    /// told apart from dragging it back open. A click on the tab is the ordinary way to reopen a
+    /// panel, and a click is a drag of no distance.
+    /// </summary>
+    private double _widthAtDragStart;
+
+    private void OnPanelSplitterDragStarted(object? sender, VectorEventArgs e)
+        => _widthAtDragStart = ReferenceEquals(sender, FolderSplitter)
+            ? FolderColumn().ActualWidth
+            : InspectorColumn().ActualWidth;
+
+    private void OnFolderSplitterDragged(object? sender, VectorEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            ResolvePanelDrag(
+                FolderColumn(),
+                viewModel.IsFolderPanelVisible,
+                viewModel.FolderPanelWidth,
+                viewModel.RememberFolderPanelWidth,
+                open => viewModel.IsFolderPanelVisible = open);
+        }
+    }
+
+    private void OnInspectorSplitterDragged(object? sender, VectorEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            ResolvePanelDrag(
+                InspectorColumn(),
+                viewModel.IsInspectorVisible,
+                viewModel.InspectorWidth,
+                viewModel.RememberInspectorWidth,
+                open => viewModel.IsInspectorVisible = open);
+        }
+    }
+
+    /// <summary>
+    /// What a finished drag meant: shut the panel, open it again, or simply a new width.
+    /// </summary>
+    private void ResolvePanelDrag(
+        ColumnDefinition column,
+        bool wasOpen,
+        double rememberedWidth,
+        Action<double> rememberWidth,
+        Action<bool> setOpen)
+    {
+        var width = column.ActualWidth;
+
+        if (!wasOpen)
+        {
+            // Shut already, so this was the tab. Let go without moving and it opens at the width it
+            // had, which is what a click on a tab should do; drag it out and it opens where it was
+            // let go of, unless that is still too narrow to be worth anything.
+            var dragged = Math.Abs(width - _widthAtDragStart) > 1;
+            var target = dragged && width >= PanelCollapseThreshold ? width : rememberedWidth;
+
+            // Recorded before the panel is marked open, because marking it open is what puts the
+            // column back to the recorded width. The other way round would throw the drag away.
+            rememberWidth(target);
+            setOpen(true);
+            return;
+        }
+
+        if (width < PanelCollapseThreshold)
+        {
+            // The width it had is kept: that is what it should come back at.
+            setOpen(false);
+            return;
+        }
+
+        rememberWidth(width);
     }
 
     /// <summary>
@@ -372,15 +514,33 @@ public partial class MainWindow : Window
     private const double FilmstripSnapRows = 1.35;
 
     /// <summary>
-    /// The thumbnail and preview heights from before the filmstrip, so leaving it puts the divider
-    /// back where it was rather than at some default.
+    /// Row 1 fills the window and row 3 is the height it was dragged to; which pane is in which is
+    /// what "preview on top" changes. These ask for the pane, not the row, so everything else —
+    /// the filmstrip, the snap, the saved height — goes on working either way round.
     /// </summary>
-    private GridLength? _gridThumbnailHeight;
-    private GridLength? _gridPreviewHeight;
+    private RowDefinition ThumbnailRow() => ContentRows.RowDefinitions[Grid.GetRow(ThumbnailPane)];
 
-    private RowDefinition ThumbnailRow() => ContentRows.RowDefinitions[1];
+    private RowDefinition PreviewRow() => ContentRows.RowDefinitions[Grid.GetRow(PreviewPane)];
 
-    private RowDefinition PreviewRow() => ContentRows.RowDefinitions[3];
+    /// <summary>
+    /// The lower of the two, which is the one with a height of its own: the upper row fills what is
+    /// left. Always this row, whichever pane is in it, so one remembered number describes the split
+    /// either way round.
+    /// </summary>
+    private RowDefinition BottomRow() => ContentRows.RowDefinitions[3];
+
+    /// <summary>
+    /// Swaps the two panes between the filling row and the fixed one.
+    ///
+    /// The heights stay with the rows rather than travelling with the panes: whichever pane is in
+    /// the top row fills the window and the other keeps its own height, which is what both
+    /// arrangements want.
+    /// </summary>
+    private void ApplyContentOrder(bool previewOnTop)
+    {
+        Grid.SetRow(PreviewPane, previewOnTop ? 1 : 3);
+        Grid.SetRow(ThumbnailPane, previewOnTop ? 3 : 1);
+    }
 
     /// <summary>
     /// Moves the star from the thumbnails to the preview and back.
@@ -392,12 +552,6 @@ public partial class MainWindow : Window
     {
         if (filmstrip)
         {
-            if (_gridThumbnailHeight is null)
-            {
-                _gridThumbnailHeight = ThumbnailRow().Height;
-                _gridPreviewHeight = PreviewRow().Height;
-            }
-
             // Auto, so the row is exactly as tall as one tile and the thumbnail size still governs it.
             ThumbnailRow().Height = GridLength.Auto;
             PreviewRow().Height = new GridLength(1, GridUnitType.Star);
@@ -406,10 +560,13 @@ public partial class MainWindow : Window
         }
         else
         {
-            ThumbnailRow().Height = _gridThumbnailHeight ?? new GridLength(1, GridUnitType.Star);
-            PreviewRow().Height = _gridPreviewHeight ?? new GridLength(280);
-            _gridThumbnailHeight = null;
-            _gridPreviewHeight = null;
+            // Put back by row rather than from what was captured on the way in: the top row always
+            // fills and the bottom row is always the remembered height, which holds whichever way
+            // round the panes are and whatever happened while the filmstrip was on.
+            ContentRows.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
+            BottomRow().Height = new GridLength(
+                (DataContext as MainWindowViewModel)?.BottomPaneHeight ?? 280);
+
             ThumbnailGrid.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
             ThumbnailGrid.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
         }
@@ -434,8 +591,13 @@ public partial class MainWindow : Window
             if (ThumbnailRow().ActualHeight < tile * FilmstripSnapRows)
             {
                 viewModel.Filmstrip = true;
+                return;
             }
 
+            // Only while it is a divider between two panes. In the filmstrip the heights are the
+            // mode's, not the photographer's, and saving them would overwrite the arrangement the
+            // filmstrip is borrowed from.
+            viewModel.RememberBottomPaneHeight(BottomRow().ActualHeight);
             return;
         }
 

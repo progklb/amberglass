@@ -170,6 +170,19 @@
                 <TextBlock Classes="hint" IsVisible="{Binding Filmstrip}"
                            Text="The thumbnail size still sets how tall the strip is." />
 
+                <CheckBox Content="Preview above thumbnails" FontSize="11"
+                          IsChecked="{Binding PreviewOnTop}"
+                          ToolTip.Tip="Puts the picture at the top of the window with the thumbnails along the bottom, the way most editing applications are laid out" />
+
+                <Separator Margin="0,4" />
+
+                <CheckBox Content="Folders panel" FontSize="11"
+                          IsChecked="{Binding IsFolderPanelVisible}"
+                          ToolTip.Tip="Show or hide the folder tree (⌘B). Dragging its divider shut does the same thing." />
+                <CheckBox Content="Metadata panel" FontSize="11"
+                          IsChecked="{Binding IsInspectorVisible}"
+                          ToolTip.Tip="Show or hide the panel on the right. Dragging its divider shut does the same thing." />
+
                 <Separator Margin="0,4" />
 
                 <TextBlock Text="RAW files" FontSize="11" />
@@ -719,14 +732,20 @@
       </DockPanel>
     </Border>
 
-    <Grid>
+    <!--
+      Named so the code-behind can reach the column definitions, which it owns: the splitters write
+      to these widths as they are dragged, and a binding would be fighting them for it. The widths
+      here are only what the designer shows; the real ones are the remembered layout, applied as the
+      window opens.
+    -->
+    <Grid x:Name="LayoutColumns">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="{Binding FolderColumnWidth}" />
+        <ColumnDefinition Width="240" MinWidth="0" />
         <!-- Wide enough for a line, or for a film edge: see AppThemes.SplitterWidthFor. -->
         <ColumnDefinition Width="{DynamicResource AppSplitterWidth}" />
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="{DynamicResource AppSplitterWidth}" />
-        <ColumnDefinition Width="360" />
+        <ColumnDefinition Width="360" MinWidth="0" />
       </Grid.ColumnDefinitions>
 
 
@@ -776,8 +795,30 @@
         </TreeView>
       </DockPanel>
 
-      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="#22FFFFFF"
-                    IsVisible="{Binding IsFolderPanelVisible}" />
+      <!--
+        The divider, and the way back when the panel is closed.
+
+        Dragging a panel shut leaves nothing to take hold of, so the divider widens into a tab with
+        an arrow on it pointing at the panel that is gone. The arrow is painted under the splitter
+        and is not hit-testable, so the whole tab is still one thing to drag; letting go without
+        moving opens the panel to the width it had.
+      -->
+      <!--
+        Both of these sit in the divider's own column, drawn one over the other. Not wrapped in a
+        panel together, which would be tidier to read: a GridSplitter finds the columns it resizes
+        by looking at the Grid it is a child of, and one child of something else resizes nothing.
+      -->
+      <Border Grid.Column="1" Background="#22FFFFFF" IsHitTestVisible="False"
+              IsVisible="{Binding !IsFolderPanelVisible}">
+        <TextBlock Text="›" FontSize="13" Opacity="0.75"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+
+      <GridSplitter x:Name="FolderSplitter" Grid.Column="1"
+                    ResizeDirection="Columns" Background="#22FFFFFF"
+                    DragStarted="OnPanelSplitterDragStarted"
+                    DragCompleted="OnFolderSplitterDragged"
+                    ToolTip.Tip="Drag to resize the folders panel; drag it shut to collapse it" />
 
       <!-- Thumbnail grid over preview -->
       <!--
@@ -819,7 +860,7 @@
           flyout rather than in a strip here: a strip docked above the splitter competed with it
           for space and had to be kept clear of it by hand.
         -->
-        <Panel Grid.Row="1" Background="{DynamicResource AppPanelBrush}">
+        <Panel x:Name="ThumbnailPane" Grid.Row="1" Background="{DynamicResource AppPanelBrush}">
 
         <!--
           Sits in the same cell as the grid, after it so it draws on top. IsHitTestVisible is left
@@ -1081,7 +1122,13 @@
         <GridSplitter x:Name="PreviewSplitter" Grid.Row="2" ResizeDirection="Rows"
                       Background="#22FFFFFF" DragCompleted="OnPreviewSplitterDragged" />
 
-        <Border Grid.Row="3" Background="{DynamicResource AppPanelBrush}">
+        <!--
+          Which row each of these two sits in is the whole of "preview on top": the heights belong
+          to the rows - one fills the window, the other is the size it was dragged to - and the
+          panes are moved between them. Set from the code-behind, like everything else about these
+          rows, because the splitter owns the heights.
+        -->
+        <Border x:Name="PreviewPane" Grid.Row="3" Background="{DynamicResource AppPanelBrush}">
           <Panel>
 
             <!-- ============ Video player ============ -->
@@ -1186,10 +1233,20 @@
         </Border>
       </Grid>
 
-      <GridSplitter Grid.Column="3" ResizeDirection="Columns" Background="#22FFFFFF" />
+      <Border Grid.Column="3" Background="#22FFFFFF" IsHitTestVisible="False"
+              IsVisible="{Binding !IsInspectorVisible}">
+        <TextBlock Text="‹" FontSize="13" Opacity="0.75"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+
+      <GridSplitter x:Name="InspectorSplitter" Grid.Column="3"
+                    ResizeDirection="Columns" Background="#22FFFFFF"
+                    DragStarted="OnPanelSplitterDragStarted"
+                    DragCompleted="OnInspectorSplitterDragged"
+                    ToolTip.Tip="Drag to resize the metadata panel; drag it shut to collapse it" />
 
       <!-- Right panel: batch editor for a multi-selection, otherwise the single-file inspector -->
-      <Panel Grid.Column="4">
+      <Panel Grid.Column="4" IsVisible="{Binding IsInspectorVisible}">
 
       <!-- IsVisible on the wrapper: on the same element as DataContext it would resolve against
            the batch ViewModel rather than this window. -->

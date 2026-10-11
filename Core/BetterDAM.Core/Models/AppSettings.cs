@@ -168,6 +168,13 @@ public sealed record AppSettings
     public RawDevelopSettings RawDevelop { get; init; } = RawDevelopSettings.Default;
 
     /// <summary>
+    /// Where the panels were left: their widths, which of them are collapsed, how tall the preview
+    /// is and which way round the two content panes sit. Arranging a window is work, and work that
+    /// has to be redone every launch is a chore rather than a preference.
+    /// </summary>
+    public LayoutSettings Layout { get; init; } = LayoutSettings.Default;
+
+    /// <summary>
     /// Whether developed RAW files are kept on disk so that opening the same photograph again is
     /// instant rather than another few seconds of demosaicing.
     ///

@@ -6382,3 +6382,61 @@ does on Enter what it does on losing focus.
 Verified in the application against the real keyword library — group still open, the keyword sorted
 into place, the caret still in the box — with the library and settings restored byte-identically
 afterwards and the pending change in the journal left alone.
+
+## The window stays how it was left ✅
+
+Three things about the layout, from use.
+
+### Panels that can be put away, and found again
+
+Dragging a side panel narrow used to leave a narrow panel: below about 150 pixels the folder tree is
+a column of ellipses and the inspector cannot lay its fields out, so the space is being paid for and
+used for nothing. Dragging one of them shut now means shutting it — and the divider widens into a
+tab with an arrow on it, so there is something to take hold of when the panel it divided is gone.
+Clicking the tab opens the panel at the width it had; dragging it opens it where it is let go of.
+
+Both panels also appear as ticks in the View flyout, which is where someone looks for them when the
+tab has not been noticed. The folders panel keeps its ⌘B.
+
+Two things worth recording about the implementation:
+
+- A GridSplitter finds the columns it resizes by looking at the Grid it is a child of. Wrapping the
+  splitter and its tab in a panel together — which reads better — gave a splitter that resized
+  nothing at all, silently. They sit in the same cell as separate children instead.
+- Reopening by drag had to record the new width *before* marking the panel open, because marking it
+  open is what puts the column back to the recorded width. The other order threw the drag away and
+  snapped the panel to whatever it had been before.
+
+### The preview can go on top
+
+The two content panes can be swapped: thumbnails above the preview, which reads as a contact sheet
+being worked through, or the preview above the thumbnails, which reads as one photograph with the
+shoot underneath and is how most editing applications are laid out.
+
+The heights stay with the rows rather than travelling with the panes — the top row fills the window,
+the bottom row is the height it was dragged to — so one remembered number describes the split either
+way round, and the filmstrip, the snap and the saved height all go on working unchanged. Getting
+that wrong first, by storing "the preview's height", would have inverted the layout on the next
+launch after the swap: the preview pinned at 280 pixels with the thumbnails filling the window.
+
+### And all of it survives the session
+
+`LayoutSettings` records the thumbnail size, both panel widths, which panels are collapsed, the
+height of the lower pane and which way round the panes sit. Written 400ms after the last change, so
+dragging a splitter or a slider is one write rather than one per frame, and read back into the
+fields rather than the properties at startup — assigning the properties would count restoring an
+arrangement as changing it and write the file straight back.
+
+Everything is clamped on the way out rather than validated on the way in. The file can be
+hand-edited, and a settings file is a poor reason for a window that cannot be used: a panel wider
+than the screen hides the photographs, and one nought pixels wide with nothing recorded as collapsed
+would leave no way to find it again.
+
+### Verified in the application
+
+Dragged the folders panel shut and saw the tab; clicked it open again at its old width; dragged it
+out to a new one; dragged the inspector shut and clicked its tab; turned the preview on top and
+watched the panes swap; changed the thumbnail size and the divider; restarted, and found 272-pixel
+thumbnails, a 293-wide folder panel, a 209-tall lower pane and the preview where it had been left.
+
+- `dotnet test` — **1008/1008 passing** (12 new).
