@@ -79,6 +79,7 @@ public partial class MainWindow : Window
             // Order matters: the panes have to be in the right rows before the filmstrip decides
             // which row carries the star.
             ApplyContentOrder(viewModel.PreviewOnTop);
+            ApplyPaneFloors();
             ApplyPanelWidths(viewModel);
             BottomRow().Height = new GridLength(viewModel.BottomPaneHeight);
             ApplyFilmstripLayout(viewModel.Filmstrip);
@@ -114,6 +115,12 @@ public partial class MainWindow : Window
                  && DataContext is MainWindowViewModel order)
         {
             ApplyContentOrder(order.PreviewOnTop);
+            ApplyPaneFloors();
+        }
+        else if (e.PropertyName == nameof(MainWindowViewModel.ThumbnailSize))
+        {
+            // The floor is one tile, so it moves with the slider.
+            ApplyPaneFloors();
         }
     }
 
@@ -528,6 +535,29 @@ public partial class MainWindow : Window
     /// either way round.
     /// </summary>
     private RowDefinition BottomRow() => ContentRows.RowDefinitions[3];
+
+    /// <summary>
+    /// How short each pane may be dragged.
+    ///
+    /// The thumbnails stop at one tile, which is the filmstrip's own height: dragging the divider as
+    /// far as it goes is then the way into the filmstrip, rather than something you pass through on
+    /// the way to a row too short to show a photograph. The preview keeps a sliver so it cannot be
+    /// shut by accident — there is no tab to bring this one back, only the divider it left behind.
+    /// </summary>
+    private const double PreviewFloor = 90;
+
+    private void ApplyPaneFloors()
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        // Both rows every time: which one holds which pane changes, and a floor left on the row the
+        // thumbnails have moved out of would pin the preview to a tile height.
+        ThumbnailRow().MinHeight = viewModel.ThumbnailSize + TileChrome;
+        PreviewRow().MinHeight = PreviewFloor;
+    }
 
     /// <summary>
     /// Swaps the two panes between the filling row and the fixed one.

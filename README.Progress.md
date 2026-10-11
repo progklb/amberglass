@@ -6440,3 +6440,24 @@ watched the panes swap; changed the thumbnail size and the divider; restarted, a
 thumbnails, a 293-wide folder panel, a 209-tall lower pane and the preview where it had been left.
 
 - `dotnet test` — **1008/1008 passing** (12 new).
+
+### A quieter handle, and a floor under the divider ✅
+
+Two follow-ups from use.
+
+A shut panel left a full-height strip down the side of the window, which is not being rid of it. It
+now leaves a short bar at the middle of the edge, where a drawer pull would be. The strip behind it
+is still there to drag — `Transparent` rather than unset, which is what keeps it hit-testable — and
+brightens faintly under the pointer. Done with a style class bound to the panel's own visibility
+rather than from the code-behind, so the hover state still works: a background set in code is a
+local value and beats anything a style has to say.
+
+The content divider now has a floor. The thumbnails stop at one tile, which is the filmstrip's own
+height, so dragging the divider as far as it goes *is* the way into the filmstrip rather than
+something passed through on the way to a row too short to show a photograph. The preview keeps a
+sliver of its own: there is no tab to bring that one back, only the divider it left behind. The
+floor follows the thumbnail slider and is re-applied to both rows when the panes swap — left on the
+row the thumbnails moved out of, it would pin the preview to a tile height.
+
+Verified in both orientations: the drag stops with one row of tiles and their captions, nothing
+clipped, and the filmstrip comes on as the hand lets go.

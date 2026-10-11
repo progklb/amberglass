@@ -74,6 +74,33 @@
       <Setter Property="Padding" Value="3,1" />
       <Setter Property="FontSize" Value="15" />
     </Style>
+
+    <!--
+      The dividers beside the two side panels. A line while it divides two things; once the panel
+      beside it is shut there is nothing to divide, so it stops drawing itself and leaves only the
+      small handle in the middle of the edge. The strip is still there to drag, and still Transparent
+      rather than unset, which is what keeps it hit-testable.
+    -->
+    <Style Selector="GridSplitter.panel">
+      <Setter Property="Background" Value="#22FFFFFF" />
+    </Style>
+    <Style Selector="GridSplitter.panel.collapsed">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="GridSplitter.panel.collapsed:pointerover">
+      <Setter Property="Background" Value="#14FFFFFF" />
+    </Style>
+
+    <!-- The pull itself. Not hit-testable, so the whole strip behind it stays one thing to drag. -->
+    <Style Selector="Border.grabHandle">
+      <Setter Property="Background" Value="#59FFFFFF" />
+      <Setter Property="Width" Value="4" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
   </Window.Styles>
 
   <!--
@@ -807,15 +834,17 @@
         Both of these sit in the divider's own column, drawn one over the other. Not wrapped in a
         panel together, which would be tidier to read: a GridSplitter finds the columns it resizes
         by looking at the Grid it is a child of, and one child of something else resizes nothing.
-      -->
-      <Border Grid.Column="1" Background="#22FFFFFF" IsHitTestVisible="False"
-              IsVisible="{Binding !IsFolderPanelVisible}">
-        <TextBlock Text="›" FontSize="13" Opacity="0.75"
-                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-      </Border>
 
-      <GridSplitter x:Name="FolderSplitter" Grid.Column="1"
-                    ResizeDirection="Columns" Background="#22FFFFFF"
+        The handle is the whole of what a shut panel leaves behind: a short bar at the middle of the
+        edge, where a drawer pull would be. The point of shutting a panel is to be rid of it, and a
+        full-height strip down the side of the window is not rid of it.
+      -->
+      <Border Grid.Column="1" Classes="grabHandle"
+              IsVisible="{Binding !IsFolderPanelVisible}" />
+
+      <GridSplitter x:Name="FolderSplitter" Grid.Column="1" Classes="panel"
+                    Classes.collapsed="{Binding !IsFolderPanelVisible}"
+                    ResizeDirection="Columns"
                     DragStarted="OnPanelSplitterDragStarted"
                     DragCompleted="OnFolderSplitterDragged"
                     ToolTip.Tip="Drag to resize the folders panel; drag it shut to collapse it" />
@@ -1233,14 +1262,12 @@
         </Border>
       </Grid>
 
-      <Border Grid.Column="3" Background="#22FFFFFF" IsHitTestVisible="False"
-              IsVisible="{Binding !IsInspectorVisible}">
-        <TextBlock Text="‹" FontSize="13" Opacity="0.75"
-                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-      </Border>
+      <Border Grid.Column="3" Classes="grabHandle"
+              IsVisible="{Binding !IsInspectorVisible}" />
 
-      <GridSplitter x:Name="InspectorSplitter" Grid.Column="3"
-                    ResizeDirection="Columns" Background="#22FFFFFF"
+      <GridSplitter x:Name="InspectorSplitter" Grid.Column="3" Classes="panel"
+                    Classes.collapsed="{Binding !IsInspectorVisible}"
+                    ResizeDirection="Columns"
                     DragStarted="OnPanelSplitterDragStarted"
                     DragCompleted="OnInspectorSplitterDragged"
                     ToolTip.Tip="Drag to resize the metadata panel; drag it shut to collapse it" />
