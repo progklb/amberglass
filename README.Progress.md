@@ -6505,3 +6505,33 @@ The divider's floor had to learn the difference: a tile in the filmstrip has no 
 floor is the thumbnail plus five points there and plus twenty-one in the grid. A single figure
 would have left a band of empty strip under the pictures, or stopped the drag short of the mode it
 is meant to reach.
+
+### A page for people who take photographs ✅
+
+`docs/` is a one-page site for GitHub Pages — the user-facing counterpart to the README, which is
+written for whoever is building this.
+
+Dark on purpose: the application is a darkroom and the page is the wall it hangs on, so the
+screenshots are the only bright thing in it. The accent is the application's own edge-print amber
+and the pull quote is marked in its chinagraph red, which makes the page look like the thing it is
+advertising rather than like a template.
+
+The copy leads with the working model, because that is the part no other browser has: edits are
+held, reviewed, then written in one go. Everything else — culling, keywording, the review, speed —
+is one section, one screenshot, a sentence and a short list. No version numbers, no test counts, no
+architecture.
+
+Screenshots are of the real application on a real shoot, taken at 2× and shipped as JPEG at 1800px:
+776 KB for all four.
+
+Four of the claims on the page now carry a small circled **i**: why nothing is written straight
+away, what XMP actually means on disk, why the grid fills from the camera's own preview, and what a
+workspace is. Hover opens them with a pointer; a tap or the keyboard holds them open, Escape and a
+click elsewhere shut them. They sit in the headings and the lists rather than in the steps, whose
+rounded card would clip them.
+
+The "why" is the part the page could not say in a headline: a star written the moment it is pressed
+means rewriting a file and waiting on the disk, and an edit discarded never reached the photograph
+at all. The workspace note says plainly that nothing is moved, renamed or hidden, that search and
+indexing are scoped to the folder that was opened, and that everything generated is kept apart from
+the media and can be released again.

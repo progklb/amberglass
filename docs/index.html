@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BetterDAM</title>
+<meta name="description" content="A fast, non-destructive browser for photographs and video. Cull, rate and keyword a whole shoot, then write it all at once.">
+<meta property="og:title" content="BetterDAM">
+<meta property="og:description" content="Cull, rate and keyword a whole shoot at speed. Nothing touches your files until you say so.">
+<meta property="og:image" content="img/filmstrip.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a gallery wall — a dark room, screenshots hung as prints with a film rebate, text set in a narrow measure beneath each. */
+:root {
+  --ink: #F2EFEA;
+  --ink-dim: #A8A29A;
+  --ink-faint: #6E6963;
+  --ground: #0B0A09;
+  --ground-lift: #141211;
+  --rebate: #1E1B19;
+  --edge: rgba(232, 148, 74, 0.22);
+  --amber: #E8944A;
+  --chinagraph: #C4362B;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-inline: 20px;
+}
+
+/* ---- Type ---- */
+h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.02em; font-weight: 600; }
+h1 { font-size: clamp(2.6rem, 7vw, 4.6rem); line-height: 1.02; font-weight: 700; letter-spacing: -0.035em; }
+h2 { font-size: clamp(1.7rem, 3.6vw, 2.5rem); line-height: 1.12; }
+h3 { font-size: 1.05rem; letter-spacing: -0.01em; }
+p { margin: 0; }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.lede { font-size: clamp(1.05rem, 2.2vw, 1.3rem); color: var(--ink-dim); max-width: 60ch; }
+.note { color: var(--ink-dim); max-width: 62ch; }
+.small { font-size: 0.93rem; color: var(--ink-dim); }
+
+/* ---- Header ---- */
+header.bar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  background: rgba(11, 10, 9, 0.86);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(242, 239, 234, 0.07);
+}
+header.bar .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 14px;
+}
+.wordmark {
+  font-family: var(--mono);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  font-size: 0.95rem;
+}
+.wordmark b { color: var(--amber); font-weight: 500; }
+.bar nav { display: flex; gap: 22px; align-items: center; }
+.bar nav a { font-size: 0.9rem; color: var(--ink-dim); text-decoration: none; }
+.bar nav a:hover { color: var(--ink); }
+@media (max-width: 620px) { .bar nav a.hide-sm { display: none; } }
+
+/* ---- Hero ---- */
+.hero { padding-block: clamp(56px, 10vw, 104px) 0; }
+.hero-grid { display: grid; gap: 26px; }
+.hero h1 { margin-top: 18px; }
+.hero h1 em {
+  font-style: normal;
+  display: block;
+  color: var(--ink-faint);
+  font-size: clamp(1.3rem, 2.6vw, 1.9rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin-top: 14px;
+}
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border-radius: 2px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.btn-primary { background: var(--amber); color: #1A0F05; }
+.btn-primary:hover { background: #F2A862; }
+.btn-ghost { border-color: rgba(242, 239, 234, 0.2); color: var(--ink); }
+.btn-ghost:hover { border-color: var(--amber); color: var(--amber); }
+
+/* ---- Prints ---- */
+figure.print { margin: 0; }
+.print .frame {
+  background: var(--rebate);
+  border: 1px solid var(--edge);
+  padding: 8px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.print img { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 1px; }
+.print figcaption {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-top: 10px;
+}
+
+/* ---- Sections ---- */
+section { padding-block: clamp(56px, 9vw, 96px); }
+section + section { border-top: 1px solid rgba(242, 239, 234, 0.06); }
+.section-head { display: grid; gap: 14px; max-width: 62ch; }
+
+.split { display: grid; gap: clamp(28px, 5vw, 56px); align-items: center; margin-top: 40px; }
+@media (min-width: 880px) {
+  .split { grid-template-columns: 1fr 1.25fr; }
+  .split.flip > figure { order: -1; }
+}
+.split > div { min-width: 0; display: grid; gap: 16px; align-content: start; }
+
+/* ---- Steps ---- */
+.steps { display: grid; gap: 1px; margin-top: 40px; background: rgba(242, 239, 234, 0.08); border: 1px solid rgba(242, 239, 234, 0.08); border-radius: 3px; overflow: hidden; }
+@media (min-width: 760px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+.step { background: var(--ground-lift); padding: 26px 24px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.step .num { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.16em; color: var(--amber); }
+.step p { color: var(--ink-dim); font-size: 0.95rem; }
+
+/* ---- Facts ---- */
+.facts { display: grid; gap: 28px 40px; margin-top: 44px; }
+@media (min-width: 700px) { .facts { grid-template-columns: repeat(2, 1fr); } }
+.fact { display: grid; gap: 7px; min-width: 0; }
+.fact h3 { font-size: 1rem; }
+.fact p { color: var(--ink-dim); font-size: 0.95rem; }
+.fact .k { font-family: var(--mono); color: var(--amber); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* ---- Keys ---- */
+kbd {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  background: rgba(242, 239, 234, 0.08);
+  border: 1px solid rgba(242, 239, 234, 0.14);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 2px 7px;
+  color: var(--ink);
+}
+ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+ul.plain li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; font-size: 0.95rem; color: var(--ink-dim); }
+ul.plain li b { color: var(--ink); font-weight: 500; }
+.tick { color: var(--amber); font-family: var(--mono); }
+
+/* ---- Quote ---- */
+.pull {
+  margin-top: 44px;
+  border-left: 2px solid var(--chinagraph);
+  padding: 4px 0 4px 22px;
+  font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  max-width: 48ch;
+}
+
+/* ---- Footer ---- */
+footer { border-top: 1px solid rgba(242, 239, 234, 0.07); padding-block: 44px 56px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; }
+footer a { color: var(--ink-dim); text-decoration: none; }
+footer a:hover { color: var(--amber); }
+.status { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
+
+/* ---- Info buttons ---- */
+/*
+  Two things put the button on the line, and it needs both.
+
+  line-height: 0 makes the wrapper as tall as the button. Without it the wrapper inherits the
+  heading's line-height, so what gets centred is a 48px line box with a 20px button sitting on its
+  baseline - which is why it looked low on a headline and fine in a sentence.
+
+  The nudge then lifts it from the middle of the x-height, where "middle" puts it, to the middle of
+  the capitals, where the eye looks for it. In em, so one rule holds at every size on the page.
+*/
+.info-wrap { position: relative; top: -0.09em; display: inline-block; vertical-align: middle; line-height: 0; margin-left: 9px; }
+button.info {
+  width: 20px; height: 20px; padding: 0;
+  display: inline-grid; place-items: center;
+  border: 1px solid rgba(232, 148, 74, 0.45);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--amber);
+  font-family: var(--mono); font-size: 0.68rem; font-weight: 500; line-height: 1;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+button.info:hover, .info-wrap.open button.info { background: var(--amber); border-color: var(--amber); color: #1A0F05; }
+.info-pop {
+  position: absolute; z-index: 20;
+  top: calc(100% + 11px); left: 50%; transform: translateX(-50%);
+  width: 340px; max-width: min(340px, calc(100vw - 32px));
+  background: var(--ground-lift);
+  border: 1px solid rgba(232, 148, 74, 0.3);
+  border-radius: 3px;
+  padding: 15px 17px;
+  display: grid; gap: 10px;
+  font-family: var(--display); font-size: 0.88rem; font-weight: 400;
+  line-height: 1.5; letter-spacing: 0; text-align: left; text-transform: none;
+  color: var(--ink-dim);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.6);
+  opacity: 0; visibility: hidden;
+  transition: opacity 130ms ease;
+}
+.info-pop b { color: var(--ink); font-weight: 500; }
+.info-wrap:hover .info-pop, .info-wrap:focus-within .info-pop, .info-wrap.open .info-pop { opacity: 1; visibility: visible; }
+.info-pop::before {
+  content: ""; position: absolute; top: -5px; left: 50%; margin-left: -5px;
+  width: 9px; height: 9px; transform: rotate(45deg);
+  background: var(--ground-lift);
+  border-left: 1px solid rgba(232, 148, 74, 0.3);
+  border-top: 1px solid rgba(232, 148, 74, 0.3);
+}
+@media (max-width: 620px) {
+  .info-pop { left: auto; right: 0; transform: none; }
+  .info-pop::before { left: auto; right: 14px; margin-left: 0; }
+}
+
+a:focus-visible, .btn:focus-visible, button.info:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <span class="wordmark">Better<b>DAM</b></span>
+    <nav>
+      <a href="#model" class="hide-sm">How it works</a>
+      <a href="#cull" class="hide-sm">Culling</a>
+      <a href="#speed" class="hide-sm">Speed</a>
+      <a href="https://github.com/">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">Photographs &amp; video · Desktop</span>
+        <h1>Rate the whole shoot.<br>Write it when you're ready.
+          <em>A fast, non-destructive browser for photographs and video.</em>
+        </h1>
+      </div>
+      <p class="lede">Hundreds of judgements in a sitting — stars, flags, keywords, labels. They are held, not written. When the pass is done you sync, and walk away.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/">Get BetterDAM</a>
+        <a class="btn btn-ghost" href="#model">See how it works</a>
+      </div>
+      <figure class="print" style="margin-top:18px">
+        <div class="frame"><img src="img/filmstrip.jpg" alt="BetterDAM showing one photograph large with a strip of thumbnails along the top" width="1800" height="1054"></div>
+        <figcaption>Filmstrip — one frame large, the shoot along the edge</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="model">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">The model</span>
+        <h2>Your files are not touched until you say so.<span class="info-wrap"><button class="info" type="button" aria-expanded="false" aria-label="Why edits are not written straight away">i</button><span class="info-pop" role="tooltip"><span><b>Because writing is slow, and you are not.</b> A star written the moment you press it means rewriting a file: the application waits on the disk, and so do you. Held instead, a pass through four hundred frames costs nothing but your attention.</span><span><b>And because you change your mind.</b> An edit you discard never reached the photograph, so there is nothing to undo and no trace left behind.</span></span></span></h2>
+        <p class="note">Every other browser writes as you work — a star here, a keyword there, each one a disk write into the photograph. BetterDAM keeps your edits in a staging area, so rating a hundred frames costs nothing but your attention.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <span class="num">01 / Stage</span>
+          <h3>Edit at speed</h3>
+          <p>Stars, keep and reject flags, keywords, labels, titles. Nothing is written, so nothing is slow — and nothing is final.</p>
+        </div>
+        <div class="step">
+          <span class="num">02 / Review</span>
+          <h3>See before and after</h3>
+          <p>Every pending change listed with the value it started from and the value it will become. Write the ones you want, discard the rest.</p>
+        </div>
+        <div class="step">
+          <span class="num">03 / Sync</span>
+          <h3>Commit in one go</h3>
+          <p>Write XMP sidecars, or embed into the files themselves. Start it, make coffee, come back to a library that agrees with itself.</p>
+        </div>
+      </div>
+
+      <p class="pull">Make hundreds of edits, then click sync and walk away.</p>
+    </div>
+  </section>
+
+  <section id="cull">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Culling</span>
+        <h2>A shoot is judged one frame at a time.</h2>
+      </div>
+      <div class="split">
+        <div>
+          <p class="note">Drag the divider to the floor and the grid collapses into a single strip with the picture filling the rest of the window. Drag it back for the contact sheet. The thumbnail size still sets how tall the strip is.</p>
+          <ul class="plain">
+            <li><kbd>E</kbd><span><b>Filmstrip</b> — one row, the picture large</span></li>
+            <li><kbd>F</kbd><span><b>Fullscreen</b> — the frame against black, nothing else</span></li>
+            <li><kbd>Space</kbd><span><b>Play</b> — video runs inline, in place</span></li>
+            <li><kbd>⌘B</kbd><span><b>Folders</b> — out of the way in one key</span></li>
+          </ul>
+          <p class="small">Panels collapse by dragging their divider shut, and come back from the tab it leaves behind. The window opens the way you left it.</p>
+        </div>
+        <figure class="print">
+          <div class="frame"><img src="img/grid.jpg" alt="The thumbnail grid with keep and reject marks, colour labels and the metadata panel" loading="lazy" width="1800" height="1054"></div>
+          <figcaption>Grid — marks, labels and the frame you are on</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="keywords">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Keywording</span>
+        <h2>Your own vocabulary, as a tick list.</h2>
+      </div>
+      <div class="split flip">
+        <div>
+          <p class="note">Arrange your keywords the way you think about your work — Shot type, Subject, Mood. Ticking <em>wide</em> under <em>Shot type</em> writes <em>wide</em>, never <em>Shot type|wide</em>, so what you tag stays readable by every other tool.</p>
+          <ul class="plain">
+            <li><span class="tick">→</span><span>Import the keywords already on your files and keep your arrangement</span></li>
+            <li><span class="tick">→</span><span>Restrict to the library, so the same subject never becomes four words</span></li>
+            <li><span class="tick">→</span><span>Copy keywords from one frame and paste them onto a selection</span></li>
+          </ul>
+        </div>
+        <figure class="print">
+          <div class="frame"><img src="img/keywords.jpg" alt="The keyword library as a hierarchy of tick boxes in the metadata panel" loading="lazy" width="800" height="1400"></div>
+          <figcaption>Keyword library — grouped for you, flat on the file</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="review">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Review</span>
+        <h2>Nothing is written behind your back.</h2>
+        <p class="note">Every change you have staged, with the value it started from beside the value it will become. Write a file, discard a file, or write the lot. Close the app with work pending and it is still there when you open it again.</p>
+      </div>
+      <figure class="print" style="margin-top:40px">
+        <div class="frame"><img src="img/changes.jpg" alt="The Changes window listing pending files with their before and after values" loading="lazy" width="1800" height="1238"></div>
+        <figcaption>Changes — before and after, file by file</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="speed">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Speed</span>
+        <h2>Built for folders that are too big.</h2>
+      </div>
+      <div class="facts">
+        <div class="fact">
+          <span class="k">Opening</span>
+          <h3>Fifty thousand files in a folder</h3>
+          <p>Only the tiles you can see are built, so a huge folder opens like a small one and scrolls like one too.</p>
+        </div>
+        <div class="fact">
+          <span class="k">Thumbnails</span>
+          <h3>The camera already made one<span class="info-wrap"><button class="info" type="button" aria-expanded="false" aria-label="Why embedded previews are faster">i</button><span class="info-pop" role="tooltip"><span>Every raw file carries a JPEG the camera made at the moment of the shot. Reading that costs a fraction of developing the sensor data, so a folder fills from the camera's own rendering.</span><span>A frame is only developed when you ask to judge it properly — and then it is kept, so coming back to it is instant.</span></span></span></h3>
+          <p>Raw files carry a preview inside them. We read those in batches rather than developing every frame to draw a grid.</p>
+        </div>
+        <div class="fact">
+          <span class="k">Raw</span>
+          <h3>Develop once, keep it</h3>
+          <p>Judge a frame on the real sensor data when you want to. The rendition is kept, so going back to it is instant.</p>
+        </div>
+        <div class="fact">
+          <span class="k">Search</span>
+          <h3>Across the whole library</h3>
+          <p>Rating, flag, label, keyword, camera, lens, orientation, date — over everything indexed, not just the folder on screen.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="fits">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Fits in</span>
+        <h2>It hands your work to the apps you already use.</h2>
+        <p class="note">Metadata is written as XMP<span class="info-wrap"><button class="info" type="button" aria-expanded="false" aria-label="What XMP means here">i</button><span class="info-pop" role="tooltip"><span><b>A sidecar is a small file beside the photograph</b> — <span style="font-family:var(--mono);font-size:0.82rem">DSCF6353.xmp</span> next to <span style="font-family:var(--mono);font-size:0.82rem">DSCF6353.RAF</span> — holding the stars, keywords and labels. Delete it and the photograph is exactly as the camera wrote it.</span><span>Raw files are never rewritten, which is how Lightroom, Bridge and Camera Raw treat them too. JPEG and video can take the metadata inside the file instead, when you sync.</span></span></span> — the same sidecars Lightroom, Bridge and Camera Raw read, and the same fields Resolve and Premiere understand. A raw file is never rewritten; its sidecar is the record, which is how the rest of the industry treats it.</p>
+      </div>
+      <ul class="plain" style="margin-top:34px; max-width:62ch">
+        <li><span class="tick">✓</span><span><b>Photographs and video together</b>, with one way of working across both</span></li>
+        <li><span class="tick">✓</span><span><b>Raw + JPEG pairs stacked</b> as one photograph, because that is what they are</span></li>
+        <li><span class="tick">✓</span><span><b>Edits made elsewhere are noticed</b>, and shown side by side before anything is settled</span></li>
+        <li><span class="tick">✓</span><span><b>Your folders stay your folders</b> — no catalogue to import into, no copies made<span class="info-wrap"><button class="info" type="button" aria-expanded="false" aria-label="What a workspace is">i</button><span class="info-pop" role="tooltip"><span><b>A workspace is just the folder you opened.</b> Nothing is moved, renamed or hidden, and the folder is as usable in Finder, Bridge or Resolve while BetterDAM has it open as it was before.</span><span>Search, keyword lists and indexing are scoped to that workspace, with one toggle to look across everything you have ever opened.</span><span>Everything the application generates — thumbnails, previews, developed raws, video proxies — is kept in its own store, never beside your media, and can be released again whenever you want the disk space back.</span></span></span></span></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="status">Open source · In development</span>
+    <a href="https://github.com/">github.com/betterdam</a>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var wraps = Array.prototype.slice.call(document.querySelectorAll('.info-wrap'));
+
+  function closeAll(except) {
+    wraps.forEach(function (w) {
+      if (w === except) { return; }
+      w.classList.remove('open');
+      var b = w.querySelector('button.info');
+      if (b) { b.setAttribute('aria-expanded', 'false'); }
+    });
+  }
+
+  wraps.forEach(function (wrap, i) {
+    var btn = wrap.querySelector('button.info');
+    var pop = wrap.querySelector('.info-pop');
+    if (!btn || !pop) { return; }
+
+    if (!pop.id) { pop.id = 'info-' + (i + 1); }
+    btn.setAttribute('aria-controls', pop.id);
+
+    // Hover is enough with a pointer; a tap or a keyboard needs the button to hold it open.
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = !wrap.classList.contains('open');
+      closeAll(wrap);
+      wrap.classList.toggle('open', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
+
+  document.addEventListener('click', function () { closeAll(null); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { closeAll(null); }
+  });
+})();
+</script>
+
+</body>
+</html>
