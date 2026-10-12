@@ -30,6 +30,7 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
     private readonly ILogger<SkiaFullImageDecoder> _logger;
     private readonly RenderCache? _renders;
     private readonly IRenderCacheMaintenance? _renderMaintenance;
+    private readonly ITransparencyMaskReader? _masks;
 
     public SkiaFullImageDecoder(
         IEmbeddedPreviewExtractor previews,
@@ -37,8 +38,10 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
         ISettingsService settings,
         ILogger<SkiaFullImageDecoder> logger,
         RenderCache? renders = null,
-        IRenderCacheMaintenance? renderMaintenance = null)
+        IRenderCacheMaintenance? renderMaintenance = null,
+        ITransparencyMaskReader? masks = null)
     {
+        _masks = masks;
         _previews = previews;
         _raw = raw;
         _settings = settings;
@@ -75,7 +78,7 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
                 if (cacheKey is not null &&
                     await ReadCachedAsync(cacheKey, file, cancellationToken).ConfigureAwait(false) is { } cached)
                 {
-                    return cached;
+                    return Masked(cached, file, hard: false);
                 }
 
                 if (await _raw.DevelopAsync(file, cancellationToken).ConfigureAwait(false) is { } developed)
@@ -85,7 +88,7 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
                         await StoreAsync(cacheKey, developed, file, cancellationToken).ConfigureAwait(false);
                     }
 
-                    return developed;
+                    return Masked(developed, file, hard: false);
                 }
 
                 _logger.LogDebug("Developing {File} produced nothing; falling back to its preview", file.FullPath);
@@ -98,7 +101,9 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
             }
 
             using var memory = new MemoryStream(preview.Jpeg);
-            return Decode(memory, cancellationToken, preview);
+            return Decode(memory, cancellationToken, preview) is { } decoded
+                ? Masked(decoded, file, hard: true)
+                : null;
         }
         catch (OperationCanceledException)
         {
@@ -114,6 +119,28 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
             _logger.LogWarning(ex, "Failed to decode {File} at full size", file.FullPath);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Clears a stitched panorama's dead space to transparent, so the viewer shows its own
+    /// background there rather than the edge pixels a develop smears outwards or the white an
+    /// embedded preview is painted with.
+    ///
+    /// Applied after the render cache rather than stored in it: the cache is JPEG and would keep
+    /// only black, where transparent is what lets the theme show through.
+    /// </summary>
+    /// <param name="hard">True for an embedded preview, for the reason the thumbnail renderer gives.</param>
+    private DecodedImage Masked(DecodedImage image, MediaFile file, bool hard)
+    {
+        if (_masks?.Read(file, Math.Max(image.Width, image.Height)) is { } mask
+            && !mask.Apply(image.Pixels, image.Width, image.Height, image.Width * 4, hard))
+        {
+            _logger.LogDebug(
+                "The transparency mask of {File} ({MaskWidth}x{MaskHeight}) does not fit its {Width}x{Height} picture",
+                file.FullPath, mask.Width, mask.Height, image.Width, image.Height);
+        }
+
+        return image;
     }
 
     /// <summary>

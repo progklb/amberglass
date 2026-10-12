@@ -38,6 +38,12 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IFfmpegLocator, FfmpegLocator>();
 
         services.AddSingleton<ThumbnailCache>();
+
+        // Stitched panoramas mark their empty corners with a mask that is JPEG XL compressed, which
+        // only ImageIO can read here. Elsewhere the reader still handles uncompressed and Deflate masks.
+        services.AddSingleton<ITransparencyMaskReader>(sp => new DngTransparencyMaskReader(
+            sp.GetRequiredService<ILogger<DngTransparencyMaskReader>>(),
+            OperatingSystem.IsMacOS() ? new ImageIoJpegXlDecoder() : null));
         // Order matters: the first generator that can handle a file wins. Skia is tried first
         // because it decodes ordinary images without spawning a process.
         services.AddSingleton<IThumbnailGenerator, SkiaImageThumbnailGenerator>();

@@ -50,7 +50,9 @@ internal static class SkiaThumbnailRenderer
     /// Renders already-decoded pixels, for the case where the picture came from a RAW develop rather
     /// than an encoded file. The develop has applied the orientation, so there is none to correct.
     /// </summary>
-    public static byte[]? Render(DecodedImage image, int maxEdgePixels, CancellationToken cancellationToken)
+    /// <param name="mask">Where the picture is not, applied after resizing so it costs tile pixels only.</param>
+    public static byte[]? Render(
+        DecodedImage image, int maxEdgePixels, CancellationToken cancellationToken, TransparencyMask? mask = null)
     {
         var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
         if (image.Pixels.Length < info.BytesSize)
@@ -73,6 +75,7 @@ internal static class SkiaThumbnailRenderer
             cancellationToken.ThrowIfCancellationRequested();
 
             using var resized = ResizeIfNeeded(source, maxEdgePixels);
+            mask?.Apply(resized ?? source);
             return Encode(resized ?? source);
         }
         finally
@@ -86,11 +89,16 @@ internal static class SkiaThumbnailRenderer
     /// Orientation to use when the image does not state its own, from the file it was extracted from.
     /// Null for an ordinary image file, which is the only authority on which way up it goes.
     /// </param>
+    /// <param name="mask">
+    /// Where the picture is not. Applied hard: this path renders embedded previews, whose dead space
+    /// is painted white, and a soft edge would blend that white into a pale line around the picture.
+    /// </param>
     public static byte[]? Render(
         Stream source,
         int maxEdgePixels,
         CancellationToken cancellationToken,
-        EmbeddedPreview? fallback = null)
+        EmbeddedPreview? fallback = null,
+        TransparencyMask? mask = null)
     {
         using var codec = SKCodec.Create(source);
         if (codec is null)
@@ -117,6 +125,7 @@ internal static class SkiaThumbnailRenderer
         var upright = oriented ?? decoded;
 
         using var resized = ResizeIfNeeded(upright, maxEdgePixels);
+        mask?.Apply(resized ?? upright, hard: true);
         return Encode(resized ?? upright);
     }
 

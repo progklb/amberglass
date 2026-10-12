@@ -32,9 +32,22 @@ public sealed class ThumbnailCache
     /// </summary>
     private const int RawRendererVersion = 2;
 
+    /// <summary>
+    /// Bumped for changes that only touch DNGs, so a library of other RAWs is not regenerated for them.
+    ///
+    /// 1: a stitched panorama's transparency mask is applied, turning its dead space black rather
+    /// than the white its preview was painted with.
+    /// </summary>
+    private const int DngRendererVersion = 1;
+
     public string GetCacheKey(MediaFile file, int maxEdgePixels)
     {
         var version = IsVersioned(file) ? $"|v{RawRendererVersion}" : string.Empty;
+        if (file.FullPath.EndsWith(".dng", StringComparison.OrdinalIgnoreCase))
+        {
+            version += $"|dng{DngRendererVersion}";
+        }
+
         var raw = $"{file.FullPath}|{file.SizeBytes}|{file.ModifiedUtc.UtcTicks}|{maxEdgePixels}{version}";
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
         return Convert.ToHexStringLower(hash);

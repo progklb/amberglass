@@ -30,15 +30,18 @@ public sealed class RawThumbnailGenerator : IThumbnailGenerator
     private readonly IEmbeddedPreviewExtractor _extractor;
     private readonly IRawDecoder _raw;
     private readonly ILogger<RawThumbnailGenerator> _logger;
+    private readonly ITransparencyMaskReader? _masks;
 
     public RawThumbnailGenerator(
         IEmbeddedPreviewExtractor extractor,
         IRawDecoder raw,
-        ILogger<RawThumbnailGenerator> logger)
+        ILogger<RawThumbnailGenerator> logger,
+        ITransparencyMaskReader? masks = null)
     {
         _extractor = extractor;
         _raw = raw;
         _logger = logger;
+        _masks = masks;
     }
 
     /// <summary>
@@ -108,7 +111,7 @@ public sealed class RawThumbnailGenerator : IThumbnailGenerator
             var developed = await _raw.DevelopAsync(file, cancellationToken).ConfigureAwait(false);
             return developed is null
                 ? null
-                : SkiaThumbnailRenderer.Render(developed, maxEdgePixels, cancellationToken);
+                : SkiaThumbnailRenderer.Render(developed, maxEdgePixels, cancellationToken, ReadMask(file, maxEdgePixels));
         }
         catch (OperationCanceledException)
         {
@@ -129,7 +132,8 @@ public sealed class RawThumbnailGenerator : IThumbnailGenerator
             // The preview is handed over with the RAW's orientation beside it, because a Canon
             // preview carries no EXIF of its own and would otherwise be shown on its side.
             using var stream = new MemoryStream(preview.Jpeg);
-            return SkiaThumbnailRenderer.Render(stream, maxEdgePixels, cancellationToken, preview);
+            return SkiaThumbnailRenderer.Render(
+                stream, maxEdgePixels, cancellationToken, preview, ReadMask(file, maxEdgePixels));
         }
         catch (OperationCanceledException)
         {
@@ -141,4 +145,10 @@ public sealed class RawThumbnailGenerator : IThumbnailGenerator
             return null;
         }
     }
+
+    /// <summary>
+    /// The dead space of a stitched panorama, so a tile shows black where the file has nothing,
+    /// rather than the white the preview was painted with or the smear a develop produces.
+    /// </summary>
+    private TransparencyMask? ReadMask(MediaFile file, int maxEdgePixels) => _masks?.Read(file, maxEdgePixels);
 }
