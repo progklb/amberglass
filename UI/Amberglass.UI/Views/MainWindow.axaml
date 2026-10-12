@@ -182,7 +182,7 @@
       <DockPanel LastChildFill="True">
         <Button DockPanel.Dock="Left" Content="☰" Padding="10,4" Margin="0,0,10,0"
                 Command="{Binding ToggleFolderPanelCommand}"
-                ToolTip.Tip="Show or hide the folders panel (⌘B)" />
+                ToolTip.Tip="Show or hide the folders panel (B)" />
 
         <!--
           View options. A flyout rather than a strip in the thumbnail panel: it costs no permanent
@@ -220,10 +220,10 @@
 
                 <CheckBox Content="Folders panel" FontSize="11"
                           IsChecked="{Binding IsFolderPanelVisible}"
-                          ToolTip.Tip="Show or hide the folder tree (⌘B). Dragging its divider shut does the same thing." />
+                          ToolTip.Tip="Show or hide the folder tree (B). Dragging its divider shut does the same thing." />
                 <CheckBox Content="Metadata panel" FontSize="11"
                           IsChecked="{Binding IsInspectorVisible}"
-                          ToolTip.Tip="Show or hide the panel on the right. Dragging its divider shut does the same thing." />
+                          ToolTip.Tip="Show or hide the panel on the right (I). Dragging its divider shut does the same thing." />
 
                 <Separator Margin="0,4" />
 

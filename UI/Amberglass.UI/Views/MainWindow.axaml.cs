@@ -527,6 +527,26 @@ public partial class MainWindow : Window
         {
             filmstripTarget.Filmstrip = !filmstripTarget.Filmstrip;
             e.Handled = true;
+            return;
+        }
+
+        // B for the folders (Browser) and I for the Inspector, bare like E and F so the layout can
+        // be changed without reaching for a modifier. Cmd/Ctrl+B still works for the folders too.
+        // Ignored while typing, so keywords and searches can still contain the letters.
+        if (e.KeyModifiers == KeyModifiers.None
+            && FocusManager?.GetFocusedElement() is not TextBox
+            && DataContext is MainWindowViewModel panelTarget)
+        {
+            if (e.Key == Key.B)
+            {
+                panelTarget.ToggleFolderPanelCommand.Execute(null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.I)
+            {
+                panelTarget.ToggleInspectorPanelCommand.Execute(null);
+                e.Handled = true;
+            }
         }
     }
 
