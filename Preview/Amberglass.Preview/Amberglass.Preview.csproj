@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Amberglass.Preview</RootNamespace>
+    <!-- Zeroed native buffers for the Core Graphics context; see ImageIoRawDecoder. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.18" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="4.151.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Amberglass.Core\Amberglass.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Decode-size and ffprobe parsing are internal but worth testing directly. -->
+    <InternalsVisibleTo Include="Amberglass.Tests" />
+  </ItemGroup>
+
+</Project>

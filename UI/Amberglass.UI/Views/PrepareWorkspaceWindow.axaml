@@ -1,0 +1,113 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Amberglass.UI.ViewModels"
+        x:Class="Amberglass.UI.Views.PrepareWorkspaceWindow"
+        x:DataType="vm:PrepareWorkspaceViewModel"
+        Title="Prepare Workspace"
+        Width="560" Height="600"
+        MinWidth="480" MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        Classes.handDrawn="{DynamicResource AppRingEnabled}">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Opacity" Value="0.55" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#12FFFFFF" />
+      <Setter Property="BorderBrush" Value="#1AFFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="16">
+
+    <!-- Footer: the same row through every state, so nothing jumps as it changes. -->
+    <Border DockPanel.Dock="Bottom" Margin="0,14,0,0">
+      <StackPanel Spacing="10">
+
+        <StackPanel Spacing="6" IsVisible="{Binding IsRunning}">
+          <ProgressBar Minimum="0" Maximum="1" Value="{Binding ProgressFraction}" Height="4" />
+          <TextBlock Text="{Binding ProgressText}" Classes="hint" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <TextBlock Text="{Binding ResultText}" Classes="hint"
+                   IsVisible="{Binding ResultText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+          <Button Content="Stop" Command="{Binding CancelCommand}" IsVisible="{Binding IsRunning}" />
+          <Button Content="Close" Click="OnClose" IsVisible="{Binding !IsRunning}" />
+          <Button Content="Prepare" Command="{Binding StartCommand}"
+                  IsVisible="{Binding !IsFinished}"
+                  IsEnabled="{Binding IsReady}"
+                  Background="#332F855A" BorderBrush="#662F855A" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!--
+      Scrolls rather than overflows. The content is not a fixed height: the video card appears only
+      when there is video, the warning only when developed RAWs are being discarded, and the progress
+      row only while running. With all of them at once the content is taller than the window, and a
+      bare StackPanel in a DockPanel does not shrink to fit — it simply draws past the footer, which
+      is what put the progress line on top of the warning card.
+    -->
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Spacing="12">
+
+      <TextBlock Text="{Binding WorkspaceName}" FontSize="16" FontWeight="SemiBold" />
+
+      <TextBlock Classes="hint"
+                 Text="Generates the thumbnails, previews and developed RAW files this workspace would otherwise produce as you browse it. Nothing is written to your media, and everything produced can be released again from Settings." />
+
+      <!-- What is here -->
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsEstimating}">
+            <ProgressBar IsIndeterminate="True" Width="60" Height="3" VerticalAlignment="Center" />
+            <TextBlock Text="Sizing up the workspace…" Classes="hint" />
+          </StackPanel>
+
+          <StackPanel Spacing="6" IsVisible="{Binding !IsEstimating}">
+            <TextBlock Text="{Binding ContentsSummary}" FontSize="13" />
+            <TextBlock Text="{Binding EstimateSummary}" Classes="hint" />
+            <TextBlock Classes="hint" Opacity="0.4"
+                       Text="Estimates only, from measured averages. You can stop at any point and keep what has been done." />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Video is opt-in: an order of magnitude more work than the photographs. -->
+      <Border Classes="card" IsVisible="{Binding CanIncludeVideo}">
+        <StackPanel Spacing="8">
+          <CheckBox Content="Also generate video proxies" IsChecked="{Binding IncludeVideoProxies}" />
+
+          <StackPanel Orientation="Horizontal" Spacing="8" IsEnabled="{Binding IncludeVideoProxies}">
+            <TextBlock Text="Quality" VerticalAlignment="Center" Opacity="0.7" />
+            <ComboBox ItemsSource="{Binding ProxyQualities}"
+                      SelectedIndex="{Binding SelectedQualityIndex}"
+                      MinWidth="100" />
+          </StackPanel>
+
+          <TextBlock Classes="hint"
+                     Text="Proxies make scrubbing smooth without touching the original files. They encode one at a time and take considerably longer than the photographs." />
+        </StackPanel>
+      </Border>
+
+      <!-- Developing every RAW is wasted effort if the results are not being kept. -->
+      <Border Classes="card" IsVisible="{Binding HasRenderCacheWarning}"
+              Background="#26FFC107" BorderBrush="#66FFC107">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Developed RAW files are not being kept" FontWeight="SemiBold" FontSize="12" />
+          <TextBlock Classes="hint" Opacity="0.85"
+                     Text="Thumbnails and previews will still be prepared, but each developed RAW will be discarded as soon as it is made. Turn on “Keep developed RAW files on disk” in Settings first." />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

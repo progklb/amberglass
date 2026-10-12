@@ -1,0 +1,605 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Amberglass.UI.ViewModels"
+        xmlns:controls="using:Amberglass.UI.Controls"
+        mc:Ignorable="d"
+        x:Class="Amberglass.UI.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Amberglass Settings"
+        Width="660" Height="660"
+        MinWidth="560" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        Classes.handDrawn="{DynamicResource AppRingEnabled}">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Opacity" Value="0.55" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.value">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#12FFFFFF" />
+      <Setter Property="BorderBrush" Value="#1AFFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14" />
+    </Style>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="MinHeight" Value="0" />
+
+      <!-- As in the inspector: hover keeps its usual highlight, only the chosen tab is drawn. -->
+      <Setter Property="HeaderTemplate">
+        <DataTemplate>
+          <Panel>
+            <controls:RoughMark Kind="Underline" HoverKind="None"
+                                IsSelected="{Binding $parent[TabItem].IsSelected}" />
+            <TextBlock Text="{Binding}" Margin="0,0,0,4" />
+          </Panel>
+        </DataTemplate>
+      </Setter>
+    </Style>
+  </Window.Styles>
+
+  <DockPanel>
+
+    <!-- Footer -->
+    <Border DockPanel.Dock="Bottom" Padding="14,10" BorderThickness="0,1,0,0" BorderBrush="#1AFFFFFF">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Close" MinWidth="88" IsCancel="True" Click="OnClose" />
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <ProgressBar IsIndeterminate="True" Width="70" Height="3"
+                       VerticalAlignment="Center" IsVisible="{Binding IsBusy}" />
+          <TextBlock Text="{Binding StatusMessage}" Classes="hint" VerticalAlignment="Center" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <TabControl x:Name="Tabs" Margin="10,8,10,0" SelectionChanged="OnTabChanged"
+                Classes.handDrawn="{DynamicResource AppRingEnabled}">
+
+      <TabItem Header="General">
+        <ScrollViewer>
+          <StackPanel Margin="4,10" Spacing="12">
+
+            <TextBlock Classes="hint"
+                       Text="How the application looks. Nothing here affects your files, or how a photograph is decoded and displayed." />
+
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Theme" Classes="section" />
+
+                <!--
+                  Sizes and opacities are set on the template rather than through the hint class:
+                  dropdown items are built in a popup of their own, which this window's styles do
+                  not reach into.
+                -->
+                <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
+                          HorizontalAlignment="Stretch">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ThemeChoice">
+                      <StackPanel Spacing="1" Margin="0,3">
+                        <TextBlock Text="{Binding Name}" FontSize="12" />
+                        <TextBlock Text="{Binding Description}" FontSize="11" Opacity="0.55" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <TextBlock Classes="hint"
+                           Text="Applies straight away, including to windows already open. The fullscreen viewer stays black whichever theme is chosen — a photograph is judged against black, not against the application." />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Selection" Classes="section" />
+
+                <ComboBox ItemsSource="{Binding SelectionColours}" SelectedItem="{Binding SelectedSelectionColour}"
+                          HorizontalAlignment="Stretch">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SelectionChoice">
+                      <StackPanel Spacing="1" Margin="0,3">
+                        <TextBlock Text="{Binding Name}" FontSize="12" />
+                        <TextBlock Text="{Binding Description}" FontSize="11" Opacity="0.55" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <TextBlock Classes="hint"
+                           Text="What a selected thumbnail or folder is filled with. Kept apart from the theme because how loud a selection should be is a different question from how dark the application should be." />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="Experimental" Classes="section" VerticalAlignment="Center" />
+                  <Border Background="#26FFC107" BorderBrush="#66FFC107" BorderThickness="1"
+                          CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
+                    <TextBlock Text="unfinished" FontSize="10" Foreground="#FFC107" />
+                  </Border>
+                </StackPanel>
+
+                <TextBlock Text="Interface brightness" FontSize="12" Margin="0,2,0,0" />
+
+                <Slider Minimum="{x:Static vm:SettingsViewModel.MinBrightness}"
+                        Maximum="{x:Static vm:SettingsViewModel.MaxBrightness}"
+                        Value="{Binding InterfaceBrightness}"
+                        ToolTip.Tip="Dims the application so the eye settles on the photograph. Nothing about the photograph itself changes." />
+
+                <TextBlock Text="{Binding BrightnessSummary}" Classes="hint" Margin="0,0,0,6" />
+
+                <TextBlock Text="Interface font" FontSize="12" Margin="0,2,0,0" />
+
+                <ComboBox ItemsSource="{Binding Fonts}" SelectedItem="{Binding SelectedFont}"
+                          HorizontalAlignment="Stretch">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FontChoice">
+                      <StackPanel Spacing="1" Margin="0,3">
+                        <TextBlock Text="{Binding Name}" FontSize="12" />
+                        <TextBlock Text="{Binding Description}" FontSize="11" Opacity="0.55" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <TextBlock Classes="hint" Margin="0,0,0,6"
+                           Text="Both are bundled, so they look the same on macOS, Windows and Linux. They set more line height than the system font, so rows and panels grow a little." />
+
+                <CheckBox Content="Hand-drawn folder selection"
+                          IsChecked="{Binding HandDrawnSelection}"
+                          ToolTip.Tip="Rings the selected folder as if by pencil, instead of filling the row" />
+
+                <StackPanel Spacing="4" Margin="24,0,0,0" IsEnabled="{Binding HandDrawnSelection}">
+                  <Slider Minimum="{Binding MinRoughness}" Maximum="{Binding MaxRoughness}"
+                          Value="{Binding HandDrawnRoughness}" />
+
+                  <CheckBox Content="Draw it on" FontSize="12"
+                            IsChecked="{Binding HandDrawnAnimates}"
+                            ToolTip.Tip="The ring draws itself rather than appearing. Most of the effect is in the motion." />
+                </StackPanel>
+
+                <TextBlock Text="{Binding HandDrawnSummary}" Classes="hint" />
+
+                <TextBlock Classes="hint" Margin="0,0,0,6"
+                           Text="Suits short folder names; a long one becomes a wide, thin oval. Whether that reads as charm or as a stretched shape is a matter of taste, which is why it is a setting rather than a decision." />
+
+                <CheckBox Content="Contact sheet"
+                          IsChecked="{Binding ContactSheet}"
+                          ToolTip.Tip="Dresses the grid as a contact sheet: verdicts in grease pencil, a film rebate above each frame, film edges between the panes" />
+
+                <TextBlock Classes="hint"
+                           Text="Rejects get a cross through the frame and keepers a box round it, drawn with the same pencil as the folder ring. Each frame is numbered in the rebate above it, the splitters become film edges, and a thumbnail comes up like a print in the tray the first time it is decoded. Photographs are never touched — the pencil is drawn over them." />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Cache">
+        <ScrollViewer>
+          <StackPanel Margin="4,10" Spacing="12">
+
+            <TextBlock Classes="hint"
+                       Text="Thumbnails and previews are derived data. Everything here can be deleted safely — Amberglass regenerates it from your original media. Your metadata edits are never stored in the cache." />
+
+            <!-- Location -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Location" Classes="section" />
+                <SelectableTextBlock Text="{Binding CachePath}" Classes="value" FontFamily="monospace" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="Change…" Command="{Binding ChooseCacheFolderCommand}" />
+                  <Button Content="Use default"
+                          Command="{Binding UseDefaultCacheFolderCommand}"
+                          IsEnabled="{Binding !IsUsingDefaultCachePath}" />
+                </StackPanel>
+
+                <TextBlock Classes="hint"
+                           Text="Useful when your media is on an external drive and the boot disk is small. Thumbnails already written stay where they are; clear the old cache if you want the space back." />
+              </StackPanel>
+            </Border>
+
+            <!-- Size -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Current size" Classes="section" />
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" />
+                  <TextBlock Text="{Binding CacheSizeDisplay}" Classes="value" FontSize="15"
+                             VerticalAlignment="Center" />
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <!-- Rolling limit -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Rolling cache" Classes="section" />
+                <CheckBox Content="Limit the cache size" IsChecked="{Binding IsCacheLimited}" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8"
+                            IsEnabled="{Binding IsCacheLimited}">
+                  <TextBlock Text="Maximum" VerticalAlignment="Center" Opacity="0.7" />
+                  <ComboBox ItemsSource="{Binding LimitChoices}"
+                            SelectedIndex="{Binding SelectedLimitIndex}"
+                            MinWidth="110" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding LimitSummary}" Classes="hint" />
+              </StackPanel>
+            </Border>
+
+            <!-- Developed RAW files -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Developed RAW files" Classes="section" />
+                <TextBlock Classes="hint"
+                           Text="Developing a RAW takes several seconds. Keeping the result means opening the same photograph again is instant — at a cost of tens of megabytes each, against tens of kilobytes for a thumbnail. This has its own budget, so it can never evict your thumbnails." />
+
+                <CheckBox Content="Keep developed RAW files on disk" IsChecked="{Binding RenderCacheEnabled}" />
+
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" />
+                  <TextBlock Text="{Binding RenderCacheSizeDisplay}" Classes="value" FontSize="15"
+                             VerticalAlignment="Center" />
+                </DockPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="8"
+                            IsEnabled="{Binding RenderCacheEnabled}">
+                  <TextBlock Text="Maximum" VerticalAlignment="Center" Opacity="0.7" />
+                  <ComboBox ItemsSource="{Binding LimitChoices}"
+                            SelectedIndex="{Binding SelectedRenderLimitIndex}"
+                            MinWidth="110" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding RenderLimitSummary}" Classes="hint" />
+
+                <Button Content="Release developed files…"
+                        Command="{Binding BeginClearRenderCacheCommand}"
+                        IsVisible="{Binding !IsConfirmingRenderClear}"
+                        IsEnabled="{Binding !IsBusy}" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsConfirmingRenderClear}">
+                  <TextBlock Text="Delete all developed RAW files?" VerticalAlignment="Center" />
+                  <Button Content="Release" Command="{Binding ConfirmClearRenderCacheCommand}"
+                          Background="#33FF6B6B" BorderBrush="#66FF6B6B" />
+                  <Button Content="Cancel" Command="{Binding CancelClearRenderCacheCommand}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <!-- Clear -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Clear cache" Classes="section" />
+                <TextBlock Classes="hint"
+                           Text="Removes every cached thumbnail. Browsing will be slower until they are regenerated. Metadata, pending changes and XMP sidecars are unaffected." />
+
+                <Button Content="Clear cache…"
+                        Command="{Binding BeginClearCacheCommand}"
+                        IsVisible="{Binding !IsConfirmingClear}"
+                        IsEnabled="{Binding !IsBusy}" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsConfirmingClear}">
+                  <TextBlock Text="Delete all cached thumbnails?" VerticalAlignment="Center" />
+                  <Button Content="Clear" Command="{Binding ConfirmClearCacheCommand}"
+                          Background="#33FF6B6B" BorderBrush="#66FF6B6B" />
+                  <Button Content="Cancel" Command="{Binding CancelClearCacheCommand}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Catalog">
+        <ScrollViewer>
+          <StackPanel Margin="4,10" Spacing="12">
+
+            <TextBlock Classes="hint"
+                       Text="The catalog is what search looks in. It is built as you browse folders and covers everything indexed so far, not just the folder on screen — that is what makes searching your whole library possible. It is rebuildable: clearing it only means folders are re-indexed next time you open them." />
+
+            <!-- Location -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Location" Classes="section" />
+                <SelectableTextBlock Text="{Binding CatalogPath}" Classes="value" FontFamily="monospace" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="Change…" Command="{Binding ChooseCatalogFolderCommand}" />
+                  <Button Content="Use default"
+                          Command="{Binding UseDefaultCatalogFolderCommand}"
+                          IsEnabled="{Binding !IsUsingDefaultCatalogPath}" />
+                </StackPanel>
+
+                <TextBlock Classes="hint"
+                           Text="Moving the catalog starts a new, empty one at the new location; the old file stays where it was and can be deleted by hand. Folders are re-indexed as you browse them." />
+              </StackPanel>
+            </Border>
+
+            <!-- Size -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Contents" Classes="section" />
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" />
+                  <TextBlock Text="{Binding CatalogSizeDisplay}" Classes="value" FontSize="15"
+                             VerticalAlignment="Center" />
+                </DockPanel>
+              </StackPanel>
+            </Border>
+
+            <!-- Prune -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Remove entries for missing files" Classes="section" />
+                <TextBlock Classes="hint"
+                           Text="Drops catalog entries whose files have been moved or deleted, so search stops returning results that lead nowhere. Everything still on disk is left alone." />
+                <Button Content="Remove missing entries"
+                        IsEnabled="{Binding !IsBusy}"
+                        Command="{Binding PruneCatalogCommand}" />
+              </StackPanel>
+            </Border>
+
+            <!-- Clear -->
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Clear catalog" Classes="section" />
+                <TextBlock Classes="hint"
+                           Text="Empties the catalog completely. Search finds nothing until folders are browsed again. Your media, metadata, sidecars and pending changes are unaffected." />
+
+                <Button Content="Clear catalog…"
+                        Command="{Binding BeginClearCatalogCommand}"
+                        IsVisible="{Binding !IsConfirmingCatalogClear}"
+                        IsEnabled="{Binding !IsBusy}" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsConfirmingCatalogClear}">
+                  <TextBlock Text="Empty the whole catalog?" VerticalAlignment="Center" />
+                  <Button Content="Clear" Command="{Binding ConfirmClearCatalogCommand}"
+                          Background="#33FF6B6B" BorderBrush="#66FF6B6B" />
+                  <Button Content="Cancel" Command="{Binding CancelClearCatalogCommand}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Display">
+        <ScrollViewer>
+          <StackPanel Margin="4,10" Spacing="12">
+
+            <TextBlock Classes="hint"
+                       Text="Which fields the metadata panel shows. Hiding one changes nothing about your files — anything already written stays written, and it reappears the moment you tick it again." />
+
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Metadata fields" Classes="section" />
+                <ItemsControl ItemsSource="{Binding FieldToggles}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MetadataFieldToggle">
+                      <CheckBox Content="{Binding Label}" IsChecked="{Binding IsVisible}" Margin="0,1" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem x:Name="KeywordsTab" Header="Keywords">
+        <DockPanel Margin="10,8">
+
+          <!-- Actions stay put at the bottom, so they do not scroll away with a long vocabulary. -->
+          <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,10,0,0"
+                      DataContext="{Binding Keywords}">
+            <CheckBox Content="Only use keywords from my library"
+                      IsChecked="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RestrictKeywordsToLibrary}"
+                      ToolTip.Tip="Typing in the metadata panel searches your library instead of accepting anything. A word that is not in the library can still be added to it in one click." />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Add group" Command="{Binding AddGroupCommand}" />
+              <Button Content="Import from workspace…" Command="{Binding ImportCommand}"
+                      IsEnabled="{Binding !IsImporting}"
+                      ToolTip.Tip="Reads the keywords already on the files in the open workspace and adds any that are missing. Your arrangement is kept." />
+              <ProgressBar IsIndeterminate="True" Width="60" Height="3" VerticalAlignment="Center"
+                           IsVisible="{Binding IsImporting}" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding StatusMessage}" Classes="hint"
+                       IsVisible="{Binding StatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <TextBlock Text="{Binding CountSummary}" Classes="hint" />
+          </StackPanel>
+
+          <!--
+            A DockPanel, not a StackPanel, and the tree given no height of its own.
+
+            A StackPanel hands every child the height it asks for and has nothing left to give away,
+            so the list kept its fixed 330 whatever the window did and simply drew over the actions
+            below once there was no longer room for it. Docking the two lines of explanation to the
+            top leaves the list as the fill, which is the one thing here that should absorb a resize:
+            the wording above it and the buttons below it need the same room at any size.
+          -->
+          <DockPanel DataContext="{Binding Keywords}">
+            <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                       Text="Your own vocabulary, arranged however you think about your work — Shot type, Subject, Mood. It becomes a tick list on the metadata panel." />
+            <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                       Text="The grouping is only for your own sanity. Each keyword is written to your files on its own — ticking “wide” under “Shot type” writes “wide”, never “Shot type|wide” — so what you tag stays readable by any other tool." />
+
+            <!-- A floor, so the list stays usable rather than collapsing to a sliver. The window's
+                 own MinHeight keeps the whole tab above that. -->
+            <Border Classes="card" Padding="0" MinHeight="120">
+              <Panel>
+                <TextBlock Text="Nothing here yet. Add a group, or import from the workspace."
+                           Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           IsVisible="{Binding IsEmpty}" />
+
+                <TreeView x:Name="KeywordTree" ItemsSource="{Binding Roots}"
+                          SelectedItem="{Binding Selected}"
+                          IsVisible="{Binding !IsEmpty}"
+                          Background="Transparent" BorderThickness="0">
+                  <TreeView.Styles>
+                    <Style Selector="TreeViewItem" x:DataType="vm:KeywordNodeViewModel">
+                      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                    </Style>
+                  </TreeView.Styles>
+                  <TreeView.ItemTemplate>
+                    <TreeDataTemplate x:DataType="vm:KeywordNodeViewModel" ItemsSource="{Binding Children}">
+                      <!-- The right margin clears the scroll bar, which would otherwise sit on top
+                           of the last button and make it unclickable. -->
+                      <DockPanel MinWidth="330" Margin="0,1,16,1">
+                        <Button DockPanel.Dock="Right" Content="✕" FontSize="10" Padding="6,2"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTip.Tip="Remove this keyword and anything under it"
+                                Command="{Binding $parent[TreeView].((vm:KeywordLibraryEditorViewModel)DataContext).RemoveCommand}"
+                                CommandParameter="{Binding}" />
+
+                        <!-- Move by picking the destination. Selecting the row is what fills the
+                             list, and clicking this button selects the row first. -->
+                        <Button DockPanel.Dock="Right" FontSize="11" Padding="6,2"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTip.Tip="File this keyword under another one">
+                          <PathIcon Width="11" Height="11"
+                                    Data="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6h-2v6H4V6h6V4zm4 0v2h3.6l-8.3 8.3 1.4 1.4L19 7.4V11h2V4h-7z" />
+                          <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight">
+                              <StackPanel Width="240" Spacing="6" Margin="4">
+                                <TextBlock Text="Move under" FontSize="11" Opacity="0.6" />
+                                <!-- Bound through the node, not $parent[TreeView]: this content lives
+                                     in a popup root, which such a binding cannot walk out of. -->
+                                <ListBox MaxHeight="420" FontSize="12"
+                                         ItemsSource="{Binding MoveTargets}"
+                                         SelectionChanged="OnMoveTargetChosen"
+                                         PointerReleased="OnMoveTargetReleased">
+                                  <!-- The keyword's current parent: shown so the tree still reads
+                                       as a tree, dimmed and unselectable because filing it where
+                                       it already is would do nothing. -->
+                                  <ListBox.Styles>
+                                    <Style Selector="ListBoxItem" x:DataType="vm:KeywordMoveTarget">
+                                      <Setter Property="IsEnabled" Value="{Binding CanChoose}" />
+                                    </Style>
+                                  </ListBox.Styles>
+                                  <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:KeywordMoveTarget">
+                                      <TextBlock Text="{Binding Label}" FontFamily="monospace" FontSize="12" />
+                                    </DataTemplate>
+                                  </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Classes="hint"
+                                           Text="Nothing is written to your photographs — this only changes how the list is arranged." />
+                              </StackPanel>
+                            </Flyout>
+                          </Button.Flyout>
+                        </Button>
+
+                        <Button DockPanel.Dock="Right" Content="+" FontSize="12" Padding="7,2"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTip.Tip="Add a keyword under this one"
+                                Command="{Binding $parent[TreeView].((vm:KeywordLibraryEditorViewModel)DataContext).AddChildCommand}"
+                                CommandParameter="{Binding}" />
+
+                        <!-- Edited in place: renaming is the commonest change by far. Re-sorted when
+                             the edit finishes, not while typing, or the row would jump under the
+                             cursor after every keystroke. -->
+                        <TextBox Text="{Binding Name}" Classes="compact" FontSize="12"
+                                 Background="Transparent" BorderThickness="0"
+                                 AttachedToVisualTree="OnKeywordNameShown"
+                                 KeyDown="OnKeywordNameKey"
+                                 LostFocus="OnKeywordNameCommitted" />
+                      </DockPanel>
+                    </TreeDataTemplate>
+                  </TreeView.ItemTemplate>
+                </TreeView>
+              </Panel>
+            </Border>
+          </DockPanel>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem x:Name="LabelsTab" Header="Labels">
+        <ScrollViewer>
+          <StackPanel Margin="4,10" Spacing="12">
+
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Colour labels" Classes="section" />
+                <TextBlock Classes="hint"
+                           Text="The name is what is written to the file, and the only part other applications read. Bridge ships these five names; Lightroom ships Red, Yellow, Green, Blue and Purple. Match whichever you use elsewhere and labels will travel. The colours are only how they are drawn here." />
+
+                <ItemsControl ItemsSource="{Binding LabelRows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LabelRowViewModel">
+                      <DockPanel Margin="0,3">
+                        <!--
+                          Colour first. It is the thing a label is recognised by, and the swatch that
+                          used to sit here as well was the same colour shown twice on one row.
+                        -->
+                        <ComboBox DockPanel.Dock="Left" Classes="compact" Width="86" FontSize="11"
+                                  Margin="0,0,8,0"
+                                  ItemsSource="{x:Static vm:LabelRowViewModel.Swatches}"
+                                  SelectedItem="{Binding Colour}"
+                                  ToolTip.Tip="How this label is drawn in Amberglass. Not stored in the file. A name that says a colour picks it on its own.">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                              <Border Width="46" Height="12" CornerRadius="2" Background="{Binding}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button DockPanel.Dock="Right" Content="✕" FontSize="10" Padding="6,2"
+                                Background="Transparent" BorderThickness="0"
+                                VerticalAlignment="Center" Margin="6,0,0,0"
+                                ToolTip.Tip="Remove this label. Photographs already carrying it keep it — the file stores the word, not the colour — but labels below this one move up a slot."
+                                Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).RemoveLabelCommand}"
+                                CommandParameter="{Binding}" />
+                        <TextBox Text="{Binding Name}" Classes="compact" FontSize="12" />
+                      </DockPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!--
+                  The same offer as the Keywords tab, and the more useful of the two: the file
+                  stores a word and not a colour, so a workspace labelled elsewhere arrives with
+                  names the library has never heard of. Until they are in the library there is no
+                  swatch to filter by and no way to put one on another photograph.
+                -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                  <Button Content="Add label" Command="{Binding AddLabelCommand}"
+                          ToolTip.Tip="Adds an empty row. It is saved once you give it a name." />
+                  <Button Content="Import from workspace…" Command="{Binding ImportLabelsCommand}"
+                          IsEnabled="{Binding !IsImportingLabels}"
+                          ToolTip.Tip="Reads the labels already on the files in the open workspace and adds any that are missing. Existing labels keep their place, so the numbers other applications write do not change meaning." />
+                  <ProgressBar IsIndeterminate="True" Width="60" Height="3" VerticalAlignment="Center"
+                               IsVisible="{Binding IsImportingLabels}" />
+                </StackPanel>
+
+                <TextBlock Classes="hint"
+                           Text="Imported labels are coloured by their name where it says one — a Lightroom “Yellow” arrives yellow — and grey otherwise, which is a starting point rather than an answer." />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+    </TabControl>
+  </DockPanel>
+</Window>

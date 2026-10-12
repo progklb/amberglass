@@ -1,4 +1,4 @@
-# BetterDAM — Implementation Progress
+# Amberglass — Implementation Progress
 
 A running log of what has been built, phase by phase. Each entry records what changed, the
 decisions worth remembering, and what is deliberately left for later.
@@ -27,11 +27,11 @@ basic preview, basic file information.
 ### Solution layout
 
 ```
-BetterDAM.sln
-    Core/BetterDAM.Core          Models, interfaces, scanning services. No UI, no ExifTool, no FFmpeg.
-    Preview/BetterDAM.Preview    Thumbnail generation (Skia for images, FFmpeg for video) + disk cache.
-    UI/BetterDAM.UI              Avalonia desktop app (MVVM). Assembly name: BetterDAM.
-    Tests/BetterDAM.Tests        xUnit tests.
+Amberglass.sln
+    Core/Amberglass.Core          Models, interfaces, scanning services. No UI, no ExifTool, no FFmpeg.
+    Preview/Amberglass.Preview    Thumbnail generation (Skia for images, FFmpeg for video) + disk cache.
+    UI/Amberglass.UI              Avalonia desktop app (MVVM). Assembly name: Amberglass.
+    Tests/Amberglass.Tests        xUnit tests.
 ```
 
 The dependency direction is one-way: `UI → Preview → Core`. `Core` references nothing but
@@ -66,7 +66,7 @@ Phase 1. Nothing in the code is coupled to 11.x specifics beyond standard XAML.
   `IAsyncEnumerable<MediaFile>`. Directory reads happen on the thread pool; unreadable folders are
   logged and skipped rather than aborting the scan. Reports `ScanProgress`.
 - `IFolderBrowser` / `FolderBrowser` — filesystem roots and lazy subfolder listing.
-- `IAppPaths` / `AppPaths` — cache and log locations under `LocalApplicationData/BetterDAM/Cache`.
+- `IAppPaths` / `AppPaths` — cache and log locations under `LocalApplicationData/Amberglass/Cache`.
 
 **Preview**
 - `ThumbnailCache` — content-addressed JPEG cache on disk. The cache key is a SHA-256 of
@@ -94,14 +94,14 @@ Phase 1. Nothing in the code is coupled to 11.x specifics beyond standard XAML.
 - Scan results are added to the UI collection in **batches** (64 items or 80ms) rather than one at a
   time, which is the difference between a grid that fills smoothly and one that crawls.
 - Starting a new scan cancels the in-flight one; likewise for preview loads.
-- Optional command-line folder argument: `BetterDAM /path/to/media` opens and scans it on startup.
+- Optional command-line folder argument: `Amberglass /path/to/media` opens and scans it on startup.
 - **Missing-FFmpeg notice** in the preview pane, shown *only while a video is selected*. It stays
   out of the way during metadata work but is unmissable the moment someone wants to watch something.
   Carries a platform-appropriate install command (`brew` / `winget` / `apt`).
 
 ### Verified
 
-- `dotnet build BetterDAM.sln` — clean, 0 warnings.
+- `dotnet build Amberglass.sln` — clean, 0 warnings.
 - `dotnet test` — **29/29 passing** (scanner recursion/filtering/cancellation/progress, media-type
   classification, cache key invalidation and round-trip, image thumbnail sizing and orientation,
   FFmpeg locator override).
@@ -129,7 +129,7 @@ treated as unavailable rather than quietly falling back to another copy on the s
 the "not installed" state reproducible for testing:
 
 ```sh
-BETTERDAM_FFMPEG_DIR=/nonexistent dotnet run --project UI/BetterDAM.UI -- /path/to/media
+BETTERDAM_FFMPEG_DIR=/nonexistent dotnet run --project UI/Amberglass.UI -- /path/to/media
 ```
 
 **RAW files got no thumbnail in Phase 1** — Skia cannot decode CR3/NEF/ARW, so they were scanned and
@@ -139,15 +139,15 @@ with ExifTool; see the "Interlude — RAW thumbnails" section below.
 **The preview pane is a large cached thumbnail** (1600px), not the original file. Real zoom/pan on
 full-resolution originals is a later refinement.
 
-**Cache location:** `~/Library/Application Support/BetterDAM/Cache`. It is fully disposable —
+**Cache location:** `~/Library/Application Support/Amberglass/Cache`. It is fully disposable —
 delete it and the app rebuilds from the originals. Logs later moved out of it; see
 "Interlude — Settings and cache management".
 
 ### How to run
 
 ```sh
-dotnet run --project UI/BetterDAM.UI                    # opens with the folder tree
-dotnet run --project UI/BetterDAM.UI -- /path/to/media  # opens and scans that folder
+dotnet run --project UI/Amberglass.UI                    # opens with the folder tree
+dotnet run --project UI/Amberglass.UI -- /path/to/media  # opens and scans that folder
 dotnet test                                             # all tests
 ```
 
@@ -168,7 +168,7 @@ metadata, edit basic metadata, edit keywords, edit ratings.
 ### New project
 
 ```text
-Metadata/BetterDAM.Metadata    ExifTool integration + XMP sidecar resolution.
+Metadata/Amberglass.Metadata    ExifTool integration + XMP sidecar resolution.
 ```
 
 Dependency direction stays one-way: `UI → Metadata → Core`. `Core` gained the metadata *models and
@@ -261,7 +261,7 @@ and provider without ExifTool installed. It verifies argument framing, response 
 reuse (five reads → one process). Like FFmpeg, `BETTERDAM_EXIFTOOL_DIR` is an authoritative override:
 
 ```sh
-BETTERDAM_EXIFTOOL_DIR=/nonexistent dotnet run --project UI/BetterDAM.UI -- /path/to/media
+BETTERDAM_EXIFTOOL_DIR=/nonexistent dotnet run --project UI/Amberglass.UI -- /path/to/media
 ```
 
 ### Deliberately deferred
@@ -294,7 +294,7 @@ the bytes **and the modification time** are unchanged.
 
 ### Preserving metadata we do not understand
 
-Updating an existing sidecar only assigns the fields BetterDAM manages, so anything another
+Updating an existing sidecar only assigns the fields Amberglass manages, so anything another
 application wrote survives. Verified end to end: a sidecar carrying `XMP-photoshop:City=Windhoek`
 still had it afterwards, alongside the newly written values.
 
@@ -698,7 +698,7 @@ architecture has been pointing at since Phase 1.
 ### New project
 
 ```text
-Database/BetterDAM.Database    SQLite catalog: schema, migrations, FTS5, Dapper repository
+Database/Amberglass.Database    SQLite catalog: schema, migrations, FTS5, Dapper repository
 ```
 
 Dependency direction still one-way: `UI → Database → Core`.
@@ -866,13 +866,13 @@ Settings and logs moved **out** of the cache directory, so clearing or relocatin
 never take them with it:
 
 ```text
-<LocalAppData>/BetterDAM/
+<LocalAppData>/Amberglass/
     settings.json          preferences
     Logs/                  diagnostics  (was Cache/Logs)
     Cache/Thumbnails/      disposable derived data, relocatable
 ```
 
-On macOS that is `~/Library/Application Support/BetterDAM`; `%LOCALAPPDATA%` on Windows and
+On macOS that is `~/Library/Application Support/Amberglass`; `%LOCALAPPDATA%` on Windows and
 `~/.local/share` on Linux, all via `LocalApplicationData` with no per-OS branching.
 
 *Upgrade note:* an empty `Cache/Logs` directory is left behind from the old layout. Harmless.
@@ -944,7 +944,7 @@ can both be blunt.
 ### Layout
 
 ```text
-<LocalAppData>/BetterDAM/
+<LocalAppData>/Amberglass/
     settings.json
     catalog.db             the search index  (relocatable)
     Logs/
@@ -1017,9 +1017,9 @@ query, not a change to how the catalog is stored.
 | Item | Where | Shortcut |
 | ---- | ----- | -------- |
 | Open Folder… | **File** | ⌘O |
-| Settings… | **BetterDAM** application menu | ⌘, |
+| Settings… | **Amberglass** application menu | ⌘, |
 
-`Application.Name` is now set to `BetterDAM`; without it the menu bar reads *"Avalonia Application"*.
+`Application.Name` is now set to `Amberglass`; without it the menu bar reads *"Avalonia Application"*.
 
 ### The trap: NativeMenuItem has no DataContext
 
@@ -1050,9 +1050,9 @@ Avalonia 11.3.20 rather than assumed.
 
 ### Verified in the running app
 
-- Menu bar reads **BetterDAM  File**.
+- Menu bar reads **Amberglass  File**.
 - **File → Open Folder…** present, showing ⌘O.
-- **BetterDAM → Settings… ⌘,** sits above Services/Hide/Quit, per macOS convention, and opening it
+- **Amberglass → Settings… ⌘,** sits above Services/Hide/Quit, per macOS convention, and opening it
   from there really does show the dialog — that path goes through `App`, which has no window
   reference of its own and forwards to `MainWindow.OpenSettingsAsync`.
 - The toolbar now starts at **Recursive**; both buttons are gone.
@@ -1145,7 +1145,7 @@ Its items are built in code for the same reason `Click` replaced `Command` last 
 
 ### Verified in the running app
 
-- Opened with a folder argument: title reads **"testmedia — BetterDAM"**, the tree has exactly one
+- Opened with a folder argument: title reads **"testmedia — Amberglass"**, the tree has exactly one
   root, and the **Everywhere** checkbox appears.
 - **File** shows Open Folder… ⌘O, Open Recent ▸, Close Workspace ⇧⌘W; the submenu lists the folder.
 - Relaunched with **no** argument and it reopened the workspace by itself.
@@ -3380,7 +3380,7 @@ a plain ellipse and above it gets scribbly. It reads well on all four theme surf
 
 ### The real question is not technical
 
-Ellipsus circles a **fixed menu of short labels**, which is what an ellipse flatters. BetterDAM's
+Ellipsus circles a **fixed menu of short labels**, which is what an ellipse flatters. Amberglass's
 sidebar is a folder tree with arbitrary-length names and nesting, and its other selection is a
 rectangular thumbnail tile. The prototype's 300px sample shows the problem: a very wide ellipse stops
 looking hand-drawn and starts looking like a stretched oval, because nobody draws a 300px ellipse
@@ -3572,7 +3572,7 @@ within itself, which was the actual complaint.
 
 ## Demo — the hand-drawn selection ring 🔬
 
-Still an experiment, still outside BetterDAM. Earlier the question was "is this possible"; this time
+Still an experiment, still outside Amberglass. Earlier the question was "is this possible"; this time
 it was "what does it look like in action", which needed something that moves.
 
 Two pieces, both in the scratchpad:
@@ -3972,7 +3972,7 @@ or `-- --check` for the resolution report described below.
 
 ### Tested on the content the application actually shows
 
-Handwriting faces are chosen by how a sentence looks in them. BetterDAM mostly shows filenames,
+Handwriting faces are chosen by how a sentence looks in them. Amberglass mostly shows filenames,
 paths, exposure values and file sizes — strings of digits, full stops and capitals, which is exactly
 where a casual face falls apart. So every candidate is drawn on `DSCF7755.JPG · 16,1 MB`,
 `1/250 s · f/2.8 · ISO 3200`, a folder name and a sentence of hint text, at the sizes the
@@ -4065,7 +4065,7 @@ dropdown beside the hand-drawn marks. `System default` remains the default.
 
 ### Bundled, not borrowed
 
-Both ship in `UI/BetterDAM.UI/Assets/Fonts` as `AvaloniaResource`, with their OFL licence text
+Both ship in `UI/Amberglass.UI/Assets/Fonts` as `AvaloniaResource`, with their OFL licence text
 beside them — which is all the licence asks, and it permits embedding and redistribution. Andika
 brings a real Bold as well as Regular, so headings are set rather than synthesised.
 
@@ -4213,7 +4213,7 @@ Checked against the catalog rather than trusted — `Wide` and `Tree` in the ope
 
 ```text
 SQL ground truth   either 85   both 17
-BetterDAM          either 85   both 17
+Amberglass          either 85   both 17
 ```
 
 **And yes, fields combine.** `r:>=4 k:sand,dust k:wide t:raw c:Fujifilm` is one query and every term
@@ -4262,7 +4262,7 @@ So rather than pick a winner, **all three are written**, and each application fi
 Reading checks all three in turn, most specific first, so a workspace that has been through another
 application reads correctly here.
 
-| | BetterDAM | digiKam | Bridge / Camera Raw | Photo Mechanic |
+| | Amberglass | digiKam | Bridge / Camera Raw | Photo Mechanic |
 |---|---|---|---|---|
 | Accepted | ✅ | ✅ | — | ✅ |
 | Rejected | ✅ | ✅ | ✅ | ✅ |
@@ -4743,11 +4743,11 @@ item template in this popup has to be self-contained — the same constraint the
 
 Twice now I have drawn conclusions from a window belonging to a build that was not the one I had
 just made. The check that settles it takes one line — compare the running process's start time
-against the mtime of `BetterDAM.dll` — and it is worth doing before reading anything off the screen:
+against the mtime of `Amberglass.dll` — and it is worth doing before reading anything off the screen:
 
 ```sh
-dll=$(stat -f %m UI/BetterDAM.UI/bin/Debug/net9.0/BetterDAM.dll)
-proc=$(ps -o lstart= -p $(pgrep -f net9.0/BetterDAM | head -1) | xargs -I{} date -j -f "%a %b %d %T %Y" "{}" +%s)
+dll=$(stat -f %m UI/Amberglass.UI/bin/Debug/net9.0/Amberglass.dll)
+proc=$(ps -o lstart= -p $(pgrep -f net9.0/Amberglass | head -1) | xargs -I{} date -j -f "%a %b %d %T %Y" "{}" +%s)
 [ "$proc" -gt "$dll" ] || echo "STALE"
 ```
 
@@ -4956,7 +4956,7 @@ the sidecar changes while it is being read, the stored stamp is the older one, s
 again next time rather than being recorded as current with stale contents. The failure is on the
 side of doing too much work.
 
-`XmpSidecar` moved from `BetterDAM.Metadata` to Core, since the indexer needs it and Database does
+`XmpSidecar` moved from `Amberglass.Metadata` to Core, since the indexer needs it and Database does
 not reference Metadata. It is pure path convention and file timestamps, with no ExifTool in it.
 
 ### No reindex was needed to deploy it
@@ -4987,7 +4987,7 @@ means a search run immediately after saving agrees with what was just saved.
 
 ## Picking up edits made elsewhere
 
-Edit a file in another application, switch back to BetterDAM, and the change is there.
+Edit a file in another application, switch back to Amberglass, and the change is there.
 
 ### How Unity does it, and why the same answer fits here
 
@@ -5018,7 +5018,7 @@ It also stands down entirely while a scan, an index or a save is already in flig
 
 ### Checked with a real external edit
 
-With BetterDAM in the background, `exiftool` wrote `Rating=4` and `Label=Approved` into
+With Amberglass in the background, `exiftool` wrote `Rating=4` and `Label=Approved` into
 `DSCF7757.xmp` — the media files untouched. Switching back to the window updated **both**
 DSCF7757.JPG and DSCF7757.RAF, which share that sidecar: four stars appeared where there had been no
 rating, and the label bar went from yellow to the green of "Approved".
@@ -5243,7 +5243,7 @@ Eight sections now sit in the space that held four.
 
 - `dotnet test` — **787/787 passing**.
 
-A note on method: `pkill -f BetterDAM.dll` between probe builds would have taken any instance of the
+A note on method: `pkill -f Amberglass.dll` between probe builds would have taken any instance of the
 user's with it. Killing only the process holding this run's own log file is the safer form, and is
 what found a stale probe build still running at the end.
 
@@ -5777,7 +5777,7 @@ with pending edits now opens the review with a banner and a *Quit without saving
 than a yes/no the user could not answer without seeing which files it was about.
 
 **And a crash that turned out to be everyone's.** Cmd+Q ended every session with
-`FTL BetterDAM terminated unexpectedly`: the container was disposed on `ShutdownRequested`, and
+`FTL Amberglass terminated unexpectedly`: the container was disposed on `ShutdownRequested`, and
 the ExifTool host is async-only to dispose, so `ServiceProvider.Dispose()` threw. Present since
 August. It also ran *before* Avalonia asks any window whether it may close, so the guard above
 could never have fired. Disposal moved to `Exit`, asynchronously.
@@ -6535,3 +6535,38 @@ means rewriting a file and waiting on the disk, and an edit discarded never reac
 at all. The workspace note says plainly that nothing is moved, renamed or hidden, that search and
 indexing are scoped to the folder that was opened, and that everything generated is kept apart from
 the media and can be released again.
+
+## Amberglass ✅
+
+The application has a name. The amber is the safelight you work under while nothing is fixed yet,
+and amber glass is what anything light-sensitive is kept in — both halves of what this does.
+
+- Six projects, the solution, every namespace and every `using`: `BetterDAM.*` is now `Amberglass.*`,
+  with `git mv` so the history follows. 240 files, 693 occurrences.
+- The environment overrides are renamed too: `AMBERGLASS_EXIFTOOL_DIR`, `AMBERGLASS_FFMPEG_DIR`,
+  `AMBERGLASS_LIBRAW_DIR`. Anyone who had set the old ones will need to set them again.
+- Nothing stamps the application's name into anyone's files — no CreatorTool, no software tag — so
+  the rename cannot reach a photograph or a sidecar. That was checked before anything was moved.
+
+### The folder that had to come with it
+
+`~/Library/Application Support/BetterDAM` holds the only things here that cannot be rebuilt from the
+media: settings, the keyword library, the catalog and the working tree of unwritten edits. A rename
+that left it behind would look exactly like losing all of it — the application would open on what
+appears to be a first run while the real folder sat beside it under the old name.
+
+`AppPaths` now moves the old folder to the new name, once, and only when there is nothing at the new
+name. Moved rather than copied, so afterwards there is one folder and no question which is being
+written to; and a failure is swallowed, because starting on a fresh folder is recoverable by hand
+where refusing to start is not.
+
+Five tests cover it: the move, everything underneath it, never overwriting a newer folder, a first
+run on a machine that never had the old name, and a second launch changing nothing.
+
+It has already run here. The catalog, the 39-keyword library and the one pending edit all came
+across, and the application opened on the same workspace it was left on.
+
+- `dotnet test` — **1013/1013 passing** (5 new).
+
+The site, the screenshots and the README carry the new name. The repository folder and the GitHub
+remote are still `BetterDAM`, which is a decision rather than an oversight.

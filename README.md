@@ -1,4 +1,4 @@
-# Better Digital Asset Management (BetterDAM)
+# Amberglass
 
 An attempt to make better media management software. This envisions a fast, non-destructive desktop media browser and metadata manager for photographs and video.
 
