@@ -96,11 +96,23 @@ public static class AppThemes
         Panel: Color.FromRgb(0x0D, 0x27, 0x29),
         Selection: Color.FromRgb(0x1C, 0x53, 0x4C));
 
+    /// <summary>
+    /// The amber a development room is lit by, held to Safelight's value so neither theme reads as
+    /// the louder one. Amber is the riskier hue behind photographs — it sits right on skin and
+    /// golden-hour tones — so it stays brown rather than orange; the selection is where it is
+    /// allowed to look like the lamp.
+    /// </summary>
+    private static readonly ThemePalette Amberlight = new(
+        Surface: Color.FromRgb(0x1A, 0x10, 0x05),
+        Panel: Color.FromRgb(0x2A, 0x1A, 0x08),
+        Selection: Color.FromRgb(0x6E, 0x46, 0x12));
+
     public static ThemePalette For(AppTheme theme) => theme switch
     {
         AppTheme.Graphite => Graphite,
         AppTheme.Safelight => Safelight,
         AppTheme.Verdigris => Verdigris,
+        AppTheme.Amberlight => Amberlight,
 
         // Darkroom is also the fallback: a settings file naming a theme this build has never heard
         // of should open looking like the application, not fail to start.

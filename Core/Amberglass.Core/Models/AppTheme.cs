@@ -30,5 +30,11 @@ public enum AppTheme
     /// <summary>
     /// Dark teal, after the green that grows on weathered copper.
     /// </summary>
-    Verdigris = 3
+    Verdigris = 3,
+
+    /// <summary>
+    /// Deep amber-brown, after the amber safelight of a development room — the lamp the name
+    /// Amberglass comes from. Warmer and softer than Safelight's red.
+    /// </summary>
+    Amberlight = 4
 }

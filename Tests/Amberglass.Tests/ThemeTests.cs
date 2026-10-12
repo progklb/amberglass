@@ -156,6 +156,7 @@ public class ThemeTests
         Assert.Equal(1, (int)AppTheme.Graphite);
         Assert.Equal(2, (int)AppTheme.Safelight);
         Assert.Equal(3, (int)AppTheme.Verdigris);
+        Assert.Equal(4, (int)AppTheme.Amberlight);
     }
 
     // ---- Selection colour ----------------------------------------------------------------------
