@@ -836,7 +836,7 @@
                 the folder, not only the few characters of its name. The name panel inside keeps
                 hugging the text, which is what the ring needs.
               -->
-              <Border Background="Transparent" ContextRequested="OnFolderContextRequested">
+              <Border x:Name="FolderRow" Background="Transparent" ContextRequested="OnFolderContextRequested">
                 <Border.ContextMenu>
                   <ContextMenu>
                     <MenuItem Header="Open as Workspace" Click="OnOpenFolderAsWorkspace" />
@@ -847,18 +847,35 @@
                 </Border.ContextMenu>
                 <!--
                   A folder glyph before each name, as Lightroom's folder panel has: it makes the tree
-                  read as folders at a glance rather than a list of words. Outside the mark, so the
-                  ring still hugs the name alone, and muted so the names stay what is read.
+                  read as folders at a glance rather than a list of words, and muted so the names
+                  stay what is read.
+
+                  The selection ring goes round the glyph rather than the name. A long folder name
+                  drew one wide, flat oval across the panel; the glyph is the same small shape on
+                  every row, so the ring is the same small circle whichever folder is chosen. The
+                  box is a little larger than the glyph to give the ring room. Hover underlines the
+                  name, selected or not, which is where the eye is when pointing at a row.
                 -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                  <PathIcon Width="14" Height="14" Opacity="0.55"
-                            VerticalAlignment="Center"
-                            IsVisible="{Binding !IsPlaceholder}"
-                            Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                  <Panel Width="28" Height="24" IsVisible="{Binding !IsPlaceholder}">
+                    <controls:RoughMark HoverKind="None"
+                                        IsSelected="{Binding $parent[TreeViewItem].IsSelected}" />
+                    <PathIcon Width="14" Height="14" Opacity="0.55"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                  </Panel>
+                  <!--
+                    Hover only, and told nothing about selection. The mark draws a row's selected
+                    mark in preference to its hover one, so a name mark that knew it was selected
+                    drew nothing at all when the selected row was pointed at.
+
+                    The row's own border decides hover, not the TreeViewItem: an item counts as
+                    pointed at while the pointer is over any of its children, which underlined every
+                    parent of the row actually under the pointer.
+                  -->
                   <Panel>
-                    <controls:RoughMark IsSelected="{Binding $parent[TreeViewItem].IsSelected}"
-                                        IsHovered="{Binding $parent[TreeViewItem].IsPointerOver}" />
-                    <TextBlock Text="{Binding Name}" Margin="10,3" />
+                    <controls:RoughMark IsHovered="{Binding #FolderRow.IsPointerOver}" />
+                    <TextBlock Text="{Binding Name}" Margin="4,3,10,3" />
                   </Panel>
                 </StackPanel>
               </Border>
