@@ -204,8 +204,11 @@ settings, with a "re-detect" action for when drivers change.
 not. Code that builds a filename and calls `File.Exists` works on the first two and silently misses
 files on Linux. One confirmed case:
 
-- `XmpSidecar` looks for `IMG001.xmp` and `IMG001.CR3.xmp` exactly. A sidecar named
-  `IMG001.XMP`, which some cameras and tools write, is never found on Linux.
+- `XmpSidecar.Find` (used to read and write sidecars) looks for `IMG001.xmp` and
+  `IMG001.CR3.xmp` exactly. A sidecar named `IMG001.XMP`, which some cameras and tools write,
+  is never read on Linux. The scanner's XMP marker on tiles already ignores case (via
+  `XmpSidecar.IsAmong`), so on Linux such a tile would show the marker while the inspector finds
+  no sidecar.
 
 **Fix.** Look sidecars up by listing the folder and matching case-insensitively. Cache the
 listing per folder during a scan rather than per file. When creating a new sidecar, keep writing

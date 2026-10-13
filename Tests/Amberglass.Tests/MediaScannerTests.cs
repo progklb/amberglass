@@ -39,6 +39,61 @@ public class MediaScannerTests
         Assert.Equal(["a.jpg", "b.MP4"], files.Select(f => f.FileName).Order());
     }
 
+    /// <summary>
+    /// The bug as reported: tiles showed no XMP marker until each file was opened in the inspector.
+    /// The scan has the folder listing in hand, so it can say from the start.
+    /// </summary>
+    [Fact]
+    public async Task Notes_which_files_have_a_sidecar_beside_them()
+    {
+        using var temp = new TempFolder();
+        temp.CreateFile("adobe.raf");
+        temp.CreateFile("adobe.xmp");
+        temp.CreateFile("appended.cr3");
+        temp.CreateFile("appended.cr3.xmp");
+        temp.CreateFile("bare.jpg");
+
+        var files = await CollectAsync(CreateScanner(), temp.Path, new ScanOptions());
+
+        Assert.Equal(
+            [("adobe.raf", true), ("appended.cr3", true), ("bare.jpg", false)],
+            files.OrderBy(f => f.FileName).Select(f => (f.FileName, f.HasSidecar)));
+    }
+
+    /// <summary>
+    /// Some cameras and tools write <c>.XMP</c>. Matched without regard to case, so a sidecar is
+    /// found on a case-sensitive filesystem exactly as on macOS or Windows.
+    /// </summary>
+    [Fact]
+    public async Task An_upper_case_sidecar_counts()
+    {
+        using var temp = new TempFolder();
+        temp.CreateFile("DSCF0001.RAF");
+        temp.CreateFile("dscf0001.XMP");
+
+        var file = Assert.Single(await CollectAsync(CreateScanner(), temp.Path, new ScanOptions()));
+
+        Assert.True(file.HasSidecar);
+    }
+
+    /// <summary>
+    /// A sidecar in another folder is not this file's, and a hidden one — macOS's <c>._</c>
+    /// resource-fork files among them — is not a sidecar at all.
+    /// </summary>
+    [Fact]
+    public async Task Only_a_visible_sidecar_in_the_same_folder_counts()
+    {
+        using var temp = new TempFolder();
+        temp.CreateFile("a.jpg");
+        temp.CreateFile(Path.Combine("elsewhere", "a.xmp"));
+        temp.CreateFile("b.jpg");
+        temp.CreateFile("._b.xmp");
+
+        var files = await CollectAsync(CreateScanner(), temp.Path, new ScanOptions { Recursive = true });
+
+        Assert.All(files, f => Assert.False(f.HasSidecar));
+    }
+
     [Fact]
     public async Task Recurses_into_subfolders_when_requested()
     {

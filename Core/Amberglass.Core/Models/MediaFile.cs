@@ -18,6 +18,14 @@ public sealed record MediaFile
 
     public required DateTimeOffset CreatedUtc { get; init; }
 
+    /// <summary>
+    /// Whether an XMP sidecar sat beside the file when it was found. Known from the folder listing
+    /// the scan already makes, so the grid can mark sidecars the moment it fills rather than only
+    /// once each file has been opened in the inspector. A snapshot: the inspector corrects it for a
+    /// file whose sidecar has come or gone since.
+    /// </summary>
+    public bool HasSidecar { get; init; }
+
     public static MediaFile FromFileInfo(FileInfo info)
     {
         return new MediaFile

@@ -14,6 +14,18 @@ public static class XmpSidecar
     public static string GetPreferredPath(string mediaPath)
         => Path.ChangeExtension(mediaPath, ".xmp");
 
+    /// <summary>
+    /// Whether one of <paramref name="mediaFileName"/>'s sidecars is among the names in its folder.
+    /// Case is ignored, so <c>IMG001.XMP</c> counts on a case-sensitive filesystem as it does on
+    /// the others — the set should be built with an ignore-case comparer.
+    /// </summary>
+    public static bool IsAmong(string mediaFileName, IReadOnlySet<string> namesInFolder)
+        => GetCandidatePaths(mediaFileName).Any(namesInFolder.Contains);
+
+    /// <summary>Whether a file name is a sidecar's, whatever its case.</summary>
+    public static bool IsSidecarName(string fileName)
+        => fileName.EndsWith(".xmp", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Both recognised sidecar locations, most-preferred first.</summary>
     public static IEnumerable<string> GetCandidatePaths(string mediaPath)
     {

@@ -240,6 +240,27 @@ public class SqliteCatalogTests
             HasSidecar: false,
             captureDate);
 
+    /// <summary>
+    /// Search results are tiles too, built from the catalog rather than a scan, so the catalog's
+    /// record of the sidecar has to come back with them.
+    /// </summary>
+    [Fact]
+    public async Task A_search_hit_says_whether_the_file_has_a_sidecar()
+    {
+        using var temp = new TempFolder();
+        var catalog = Create(temp);
+
+        await catalog.UpsertAsync([
+            Entry("/with.jpg", title: "Coast") with { HasSidecar = true },
+            Entry("/without.jpg", title: "Coast")
+        ]);
+
+        var hits = await catalog.SearchAsync(SearchQueryParser.Parse("Coast"));
+
+        Assert.True(hits.Single(h => h.FullPath == "/with.jpg").ToMediaFile().HasSidecar);
+        Assert.False(hits.Single(h => h.FullPath == "/without.jpg").ToMediaFile().HasSidecar);
+    }
+
     private static async Task<IReadOnlyList<string>> SearchPathsAsync(SqliteCatalog catalog, string query)
         => (await catalog.SearchAsync(SearchQueryParser.Parse(query))).Select(h => h.FullPath).ToList();
 

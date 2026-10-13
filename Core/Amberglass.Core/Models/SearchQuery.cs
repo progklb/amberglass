@@ -100,7 +100,8 @@ public sealed record SearchHit(
     DateTimeOffset ModifiedUtc,
     DateTimeOffset CreatedUtc,
     int? Rating,
-    string? Title)
+    string? Title,
+    bool HasSidecar = false)
 {
     public MediaFile ToMediaFile() => new()
     {
@@ -109,6 +110,7 @@ public sealed record SearchHit(
         MediaType = MediaType,
         SizeBytes = SizeBytes,
         ModifiedUtc = ModifiedUtc,
-        CreatedUtc = CreatedUtc
+        CreatedUtc = CreatedUtc,
+        HasSidecar = HasSidecar
     };
 }

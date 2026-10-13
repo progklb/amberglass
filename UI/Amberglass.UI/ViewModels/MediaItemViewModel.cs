@@ -22,6 +22,10 @@ public sealed partial class MediaItemViewModel : ObservableObject
     {
         File = file;
         _thumbnails = thumbnails;
+
+        // From the scan's folder listing, or the catalog for a search result, so the grid marks
+        // sidecars as it fills. The inspector corrects it when a file is opened.
+        _hasSidecar = file.HasSidecar;
     }
 
     public MediaFile File { get; }

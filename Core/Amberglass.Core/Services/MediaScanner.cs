@@ -69,6 +69,12 @@ public sealed class MediaScanner : IMediaScanner
         try
         {
             var directory = new DirectoryInfo(folder);
+            var media = new List<FileInfo>();
+
+            // Sidecars are noted on the way past rather than looked up per file afterwards: the
+            // listing is already in hand, and a File.Exists per photograph would double the disk
+            // traffic of a scan for a flag on a tile.
+            var sidecars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var info in directory.EnumerateFiles())
             {
@@ -77,12 +83,19 @@ public sealed class MediaScanner : IMediaScanner
                     continue;
                 }
 
-                if (!MediaTypeRegistry.IsSupported(info.FullName))
+                if (XmpSidecar.IsSidecarName(info.Name))
                 {
-                    continue;
+                    sidecars.Add(info.Name);
                 }
+                else if (MediaTypeRegistry.IsSupported(info.FullName))
+                {
+                    media.Add(info);
+                }
+            }
 
-                files.Add(MediaFile.FromFileInfo(info));
+            foreach (var info in media)
+            {
+                files.Add(MediaFile.FromFileInfo(info) with { HasSidecar = XmpSidecar.IsAmong(info.Name, sidecars) });
             }
 
             foreach (var sub in directory.EnumerateDirectories())

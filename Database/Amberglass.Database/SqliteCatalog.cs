@@ -271,7 +271,8 @@ public sealed class SqliteCatalog : ICatalog
             DateTimeOffset.FromUnixTimeSeconds(r.ModifiedUtc),
             DateTimeOffset.FromUnixTimeSeconds(r.CreatedUtc),
             r.Rating is { } rating ? (int)rating : null,
-            r.Title)).ToList();
+            r.Title,
+            r.HasSidecar != 0)).ToList();
     }
 
     /// <summary>
@@ -439,7 +440,7 @@ public sealed class SqliteCatalog : ICatalog
         int limit)
     {
         var sql = new StringBuilder("""
-            SELECT m.Path, m.FileName, m.MediaType, m.SizeBytes, m.ModifiedUtc, m.CreatedUtc, m.Rating, m.Title
+            SELECT m.Path, m.FileName, m.MediaType, m.SizeBytes, m.ModifiedUtc, m.CreatedUtc, m.Rating, m.Title, m.HasSidecar
             FROM Media m
             WHERE 1 = 1
             """);
@@ -697,7 +698,8 @@ public sealed class SqliteCatalog : ICatalog
         long ModifiedUtc,
         long CreatedUtc,
         long? Rating,
-        string? Title);
+        string? Title,
+        long HasSidecar);
 
     /// <summary>Test hook: the number of media-to-keyword links, used to check for orphans.</summary>
     internal async Task<int> CountKeywordLinksAsync()
