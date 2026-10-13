@@ -845,11 +845,22 @@
                               Click="OnOpenFolderInFileManager" />
                   </ContextMenu>
                 </Border.ContextMenu>
-                <Panel HorizontalAlignment="Left">
-                  <controls:RoughMark IsSelected="{Binding $parent[TreeViewItem].IsSelected}"
-                                      IsHovered="{Binding $parent[TreeViewItem].IsPointerOver}" />
-                  <TextBlock Text="{Binding Name}" Margin="10,3" />
-                </Panel>
+                <!--
+                  A folder glyph before each name, as Lightroom's folder panel has: it makes the tree
+                  read as folders at a glance rather than a list of words. Outside the mark, so the
+                  ring still hugs the name alone, and muted so the names stay what is read.
+                -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                  <PathIcon Width="14" Height="14" Opacity="0.55"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding !IsPlaceholder}"
+                            Data="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                  <Panel>
+                    <controls:RoughMark IsSelected="{Binding $parent[TreeViewItem].IsSelected}"
+                                        IsHovered="{Binding $parent[TreeViewItem].IsPointerOver}" />
+                    <TextBlock Text="{Binding Name}" Margin="10,3" />
+                  </Panel>
+                </StackPanel>
               </Border>
             </TreeDataTemplate>
           </TreeView.ItemTemplate>
@@ -1064,14 +1075,19 @@
                               IsVisible="{Binding HasConflicts}">
                         <TextBlock Text="⚠ CONFLICT" FontSize="9" />
                       </Border>
+                      <!--
+                        With the other notes about the file on disk, rather than along the bottom
+                        edge: there it shared the row with the stars and flag, and once sidecars
+                        were detected for every tile on opening a folder the two met in the middle
+                        of any rated tile.
+                      -->
+                      <Border Background="#99000000" CornerRadius="2" Padding="4,1"
+                              HorizontalAlignment="Right"
+                              ToolTip.Tip="An XMP sidecar exists for this file"
+                              IsVisible="{Binding HasSidecar}">
+                        <TextBlock Text="XMP" FontSize="9" />
+                      </Border>
                     </StackPanel>
-                    <Border Background="#99000000" CornerRadius="2"
-                            Padding="4,1" Margin="4"
-                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                            ToolTip.Tip="An XMP sidecar exists for this file"
-                            IsVisible="{Binding HasSidecar}">
-                      <TextBlock Text="XMP" FontSize="9" />
-                    </Border>
 
                     <!--
                       The judgements: kept or rejected, and how good. Bottom-left, on one dark

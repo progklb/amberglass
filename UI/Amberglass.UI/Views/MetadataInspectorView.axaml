@@ -279,6 +279,42 @@
               </StackPanel>
 
               <!--
+                Label before Keywords: it is one pick from a short list, made in the same pass as the
+                rating and flag, where keywords open onto the library below them and want to sit next
+                to it. Transparent for the same reason as the Keywords field: without it a right-click
+                in the gaps lands on nothing.
+              -->
+              <StackPanel IsVisible="{Binding ShowLabel}" Background="Transparent">
+                <StackPanel.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Manage labels…" Click="OnManageLabels" />
+                  </ContextMenu>
+                </StackPanel.ContextMenu>
+                <TextBlock Text="Label" Classes="label" />
+                <!--
+                  From the library, like keywords. A label the file already carries that the library
+                  does not define is added to the list rather than dropped, so opening the file
+                  cannot quietly rewrite it.
+                -->
+                <ComboBox ItemsSource="{Binding LabelChoices}"
+                          SelectedItem="{Binding SelectedLabelChoice}"
+                          HorizontalAlignment="Stretch">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LabelChoice">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Width="11" Height="11" CornerRadius="2" VerticalAlignment="Center"
+                                Background="{Binding Colour}" IsVisible="{Binding HasColour}" />
+                        <Border Width="11" Height="11" CornerRadius="2" VerticalAlignment="Center"
+                                BorderBrush="#55FFFFFF" BorderThickness="1"
+                                IsVisible="{Binding !HasColour}" />
+                        <TextBlock Text="{Binding Display}" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </StackPanel>
+
+              <!--
                 Transparent so the empty space between the pills and the input is hit-testable:
                 without it a right-click only lands when it happens to strike a word.
               -->
@@ -402,7 +438,12 @@
                 and moving to the next, and a panel that refolded itself each time would be reopened
                 once per photograph.
               -->
-            <Expander Grid.Row="1" Margin="8,6,8,0" IsExpanded="{Binding IsKeywordLibraryOpen}"
+            <!--
+              10 on top, the same as the label heading every other field starts with, so the gap
+              above the library matches the gap between any two fields whether or not the Keywords
+              field above it is shown.
+            -->
+            <Expander Grid.Row="1" Margin="8,10,8,0" IsExpanded="{Binding IsKeywordLibraryOpen}"
                         IsVisible="{Binding HasKeywordLibrary}"
                         HorizontalAlignment="Stretch">
                 <!-- The same entry as on the Keywords field above: this is the other half of the
@@ -436,38 +477,6 @@
               </Expander>
 
             <StackPanel Grid.Row="2" Margin="8,0,8,4">
-
-              <!-- Transparent for the same reason as the Keywords field: without it a right-click
-                   in the gaps lands on nothing. -->
-              <StackPanel IsVisible="{Binding ShowLabel}" Background="Transparent">
-                <StackPanel.ContextMenu>
-                  <ContextMenu>
-                    <MenuItem Header="Manage labels…" Click="OnManageLabels" />
-                  </ContextMenu>
-                </StackPanel.ContextMenu>
-                <TextBlock Text="Label" Classes="label" />
-                <!--
-                  From the library, like keywords. A label the file already carries that the library
-                  does not define is added to the list rather than dropped, so opening the file
-                  cannot quietly rewrite it.
-                -->
-                <ComboBox ItemsSource="{Binding LabelChoices}"
-                          SelectedItem="{Binding SelectedLabelChoice}"
-                          HorizontalAlignment="Stretch">
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:LabelChoice">
-                      <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Border Width="11" Height="11" CornerRadius="2" VerticalAlignment="Center"
-                                Background="{Binding Colour}" IsVisible="{Binding HasColour}" />
-                        <Border Width="11" Height="11" CornerRadius="2" VerticalAlignment="Center"
-                                BorderBrush="#55FFFFFF" BorderThickness="1"
-                                IsVisible="{Binding !HasColour}" />
-                        <TextBlock Text="{Binding Display}" VerticalAlignment="Center" />
-                      </StackPanel>
-                    </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
-              </StackPanel>
 
               <StackPanel IsVisible="{Binding ShowCreator}">
                 <TextBlock Text="Creator" Classes="label" />
