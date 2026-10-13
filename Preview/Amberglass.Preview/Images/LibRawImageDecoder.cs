@@ -33,7 +33,19 @@ public sealed class LibRawImageDecoder : IRawDecoder
 
     public bool IsAvailable => _locator.IsAvailable;
 
-    public async Task<DecodedImage?> DevelopAsync(MediaFile file, CancellationToken cancellationToken = default)
+    public Task<DecodedImage?> DevelopAsync(MediaFile file, CancellationToken cancellationToken = default)
+        => DevelopAsync(file, draft: false, cancellationToken);
+
+    /// <summary>
+    /// Half size: LibRaw takes each 2×2 block of the sensor as one pixel instead of interpolating,
+    /// which skips the demosaic altogether. Measured on a 26MP RAF at 0.26s against 0.55s for the
+    /// fastest full develop and 3s for the best — and still about 3000px across, which is more than
+    /// a screen shows while a slider is being dragged.
+    /// </summary>
+    public Task<DecodedImage?> DevelopDraftAsync(MediaFile file, CancellationToken cancellationToken = default)
+        => DevelopAsync(file, draft: true, cancellationToken);
+
+    private async Task<DecodedImage?> DevelopAsync(MediaFile file, bool draft, CancellationToken cancellationToken)
     {
         if (_locator.DcrawPath is not { } dcraw || file.MediaType != MediaType.Image)
         {
@@ -44,7 +56,7 @@ public sealed class LibRawImageDecoder : IRawDecoder
 
         try
         {
-            process = Process.Start(BuildStartInfo(dcraw, file.FullPath, _settings.Current.RawDevelop));
+            process = Process.Start(BuildStartInfo(dcraw, file.FullPath, _settings.Current.RawDevelop, draft));
             if (process is null)
             {
                 return null;
@@ -104,7 +116,7 @@ public sealed class LibRawImageDecoder : IRawDecoder
         }
     }
 
-    internal static ProcessStartInfo BuildStartInfo(string dcraw, string path, RawDevelopSettings develop)
+    internal static ProcessStartInfo BuildStartInfo(string dcraw, string path, RawDevelopSettings develop, bool draft = false)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -115,7 +127,7 @@ public sealed class LibRawImageDecoder : IRawDecoder
             CreateNoWindow = true
         };
 
-        foreach (var argument in BuildArguments(path, develop))
+        foreach (var argument in BuildArguments(path, develop, draft))
         {
             startInfo.ArgumentList.Add(argument);
         }
@@ -127,9 +139,16 @@ public sealed class LibRawImageDecoder : IRawDecoder
     /// Translates the develop settings into dcraw_emu arguments. Kept apart from launching anything
     /// so the mapping can be tested — a wrong flag here is a silently different photograph.
     /// </summary>
-    internal static List<string> BuildArguments(string path, RawDevelopSettings develop)
+    internal static List<string> BuildArguments(string path, RawDevelopSettings develop, bool draft = false)
     {
         var arguments = new List<string>();
+
+        // Half size, for the draft shown while a slider moves. Interpolation is moot with it — there
+        // is nothing left to interpolate — but the rest of the settings apply as they would in full.
+        if (draft)
+        {
+            arguments.Add("-h");
+        }
 
         // White balance. Camera is the picture as shot; auto is LibRaw averaging the frame.
         arguments.Add(develop.WhiteBalance == RawWhiteBalance.Auto ? "-a" : "-w");

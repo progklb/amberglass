@@ -23,4 +23,14 @@ public interface IRawDecoder
 
     /// <summary>Null when the file is not RAW, LibRaw is missing, or development fails.</summary>
     Task<DecodedImage?> DevelopAsync(MediaFile file, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A quick, reduced-resolution develop with the same settings — what is shown while a develop
+    /// slider is still moving, so the change can be seen before the full develop has been paid for.
+    ///
+    /// Null when the decoder has no cheaper route than the full develop, which is the default: the
+    /// caller then simply waits for <see cref="DevelopAsync"/>.
+    /// </summary>
+    Task<DecodedImage?> DevelopDraftAsync(MediaFile file, CancellationToken cancellationToken = default)
+        => Task.FromResult<DecodedImage?>(null);
 }

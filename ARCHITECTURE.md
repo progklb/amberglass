@@ -3,7 +3,8 @@
 A high-level map of the application: what the parts are, what each is responsible for, and how
 they fit together. For *why* the product exists and what it aims to do, see [README.md](README.md)
 (the design spec). For the build history and the reasoning behind individual decisions, see
-[README.Progress.md](README.Progress.md).
+[README.Progress.md](README.Progress.md). For platform support and the plan for Windows and Linux,
+see [CROSS_PLATFORM.md](CROSS_PLATFORM.md).
 
 ---
 
@@ -166,7 +167,15 @@ Pixels and sound.
   folder's worth of tiles. Two tiers are cached: grid tiles (320px) and previews (1600px).
 - **Full resolution** — `SkiaFullImageDecoder` for inspection-quality decode; RAW goes through
   `CompositeRawDecoder` (LibRaw first, then ImageIO on macOS for formats LibRaw can't unpack, such as
-  JPEG XL DNG), driven by `RawDevelopSettings`.
+  JPEG XL DNG), driven by `RawDevelopSettings`. `SharedRawDecoder` wraps it so a file is developed
+  once however many callers ask. While develop settings are being adjusted, a half-size LibRaw
+  draft is shown first and the full develop follows once they settle (`DevelopPreviewScheduler` in
+  the UI).
+- **DNG specifics** — `DngPreviewExtractor` wraps the ExifTool preview extractor and prefers the
+  largest rendered preview inside a DNG (Lightroom panoramas carry a 1024px one beside a 256px
+  thumbnail). `DngTransparencyMaskReader` + `TransparencyMask` clear a stitched panorama's dead
+  space: black in thumbnails, transparent in the viewer. Both read the file with the small TIFF
+  walker in `DngTiff.cs`; JPEG XL tiles decode through `IJpegXlDecoder` (ImageIO on macOS).
 - **Video** — `FfprobeVideoInfoProvider` (stream info), `FfmpegVideoProxyService` (low-res proxies
   for smooth playback), `FfmpegFrameSource` (raw frames for on-screen playback).
 - **Audio** — `FfmpegAudioPlayer` decodes to PCM; `CoreAudioOutput` plays it on macOS;

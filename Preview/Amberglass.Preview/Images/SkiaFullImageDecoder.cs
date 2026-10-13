@@ -53,6 +53,37 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
     public Task<DecodedImage?> DecodeAsync(MediaFile file, CancellationToken cancellationToken = default)
         => Task.Run(() => DecodeCore(file, cancellationToken), cancellationToken);
 
+    /// <summary>
+    /// The RAW's draft develop, masked like the full one. Never cached: it exists only to be
+    /// replaced a moment later, and the settings it was made with are usually already stale.
+    /// </summary>
+    public async Task<DecodedImage?> DecodeDraftAsync(MediaFile file, CancellationToken cancellationToken = default)
+    {
+        if (file.MediaType != MediaType.Image
+            || SkiaThumbnailRenderer.CanDecode(file.FullPath)
+            || !_settings.Current.DevelopRawFiles
+            || !_raw.IsAvailable)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _raw.DevelopDraftAsync(file, cancellationToken).ConfigureAwait(false) is { } draft
+                ? Masked(draft, file, hard: false)
+                : null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "No draft of {File}", file.FullPath);
+            return null;
+        }
+    }
+
     private async Task<DecodedImage?> DecodeCore(MediaFile file, CancellationToken cancellationToken)
     {
         if (file.MediaType != MediaType.Image)
@@ -83,9 +114,12 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
 
                 if (await _raw.DevelopAsync(file, cancellationToken).ConfigureAwait(false) is { } developed)
                 {
+                    // Stored in the background: encoding a 26MP rendition is a fifth of a second
+                    // (a third for a panorama) that the picture used to wait for. The image is not
+                    // modified after this point — masking works on a copy — so sharing it is safe.
                     if (cacheKey is not null)
                     {
-                        await StoreAsync(cacheKey, developed, file, cancellationToken).ConfigureAwait(false);
+                        _ = Task.Run(() => StoreAsync(cacheKey, developed, file, CancellationToken.None));
                     }
 
                     return Masked(developed, file, hard: false);

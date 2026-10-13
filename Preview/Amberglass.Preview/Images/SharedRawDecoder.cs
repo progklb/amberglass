@@ -45,7 +45,7 @@ public sealed class SharedRawDecoder : IRawDecoder
     /// The file as it is on disk and the settings it is developed with: a file changed underneath, or
     /// a slider moved, is a different develop.
     /// </summary>
-    private sealed record DevelopKey(string Path, long Size, long ModifiedTicks, RawDevelopSettings Develop);
+    private sealed record DevelopKey(string Path, long Size, long ModifiedTicks, RawDevelopSettings Develop, bool Draft);
 
     /// <summary>One develop in progress and how many callers are still waiting on it.</summary>
     private sealed class InFlight
@@ -57,9 +57,17 @@ public sealed class SharedRawDecoder : IRawDecoder
         public int Waiters { get; set; }
     }
 
-    public async Task<DecodedImage?> DevelopAsync(MediaFile file, CancellationToken cancellationToken = default)
+    public Task<DecodedImage?> DevelopAsync(MediaFile file, CancellationToken cancellationToken = default)
+        => SharedAsync(file, draft: false, cancellationToken);
+
+    /// <summary>Shared the same way, under its own key: a draft never stands in for a full develop.</summary>
+    public Task<DecodedImage?> DevelopDraftAsync(MediaFile file, CancellationToken cancellationToken = default)
+        => SharedAsync(file, draft: true, cancellationToken);
+
+    private async Task<DecodedImage?> SharedAsync(MediaFile file, bool draft, CancellationToken cancellationToken)
     {
-        var key = new DevelopKey(file.FullPath, file.SizeBytes, file.ModifiedUtc.UtcTicks, _settings.Current.RawDevelop);
+        var key = new DevelopKey(
+            file.FullPath, file.SizeBytes, file.ModifiedUtc.UtcTicks, _settings.Current.RawDevelop, draft);
         InFlight entry;
 
         lock (_gate)
@@ -113,7 +121,9 @@ public sealed class SharedRawDecoder : IRawDecoder
 
         try
         {
-            image = await _inner.DevelopAsync(file, entry.Cancellation.Token).ConfigureAwait(false);
+            image = key.Draft
+                ? await _inner.DevelopDraftAsync(file, entry.Cancellation.Token).ConfigureAwait(false)
+                : await _inner.DevelopAsync(file, entry.Cancellation.Token).ConfigureAwait(false);
             return image;
         }
         finally

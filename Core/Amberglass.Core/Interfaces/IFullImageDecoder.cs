@@ -30,4 +30,12 @@ public sealed record DecodedImage(byte[] Pixels, int Width, int Height, string? 
 public interface IFullImageDecoder
 {
     Task<DecodedImage?> DecodeAsync(MediaFile file, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A quick reduced-resolution rendering with the current develop settings, to show while those
+    /// settings are still being adjusted. Null when there is nothing quicker than
+    /// <see cref="DecodeAsync"/> — anything that is not a RAW being developed, for a start.
+    /// </summary>
+    Task<DecodedImage?> DecodeDraftAsync(MediaFile file, CancellationToken cancellationToken = default)
+        => Task.FromResult<DecodedImage?>(null);
 }

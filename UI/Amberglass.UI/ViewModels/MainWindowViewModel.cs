@@ -430,7 +430,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// Zero when nothing knows, which leaves the loupe at the source's own 1:1.
     /// </summary>
     public double LoupeTargetWidth
-        => FullPreview?.PixelSize.Width ?? MetadataPixelWidth() ?? Preview?.PixelSize.Width ?? 0;
+        => (IsFullPreviewDraft ? null : FullPreview?.PixelSize.Width)
+           ?? MetadataPixelWidth() ?? Preview?.PixelSize.Width ?? 0;
 
     /// <summary>
     /// The full pixel width according to ExifTool's Composite:ImageSize.
@@ -1416,6 +1417,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // Swapped, then the old one released: assigning first means the UI is already showing
             // the new bitmap before the previous one is disposed.
             var replaced = FullPreview;
+            IsFullPreviewDraft = false;
             FullPreview = ToBitmap(decoded);
             FullPreviewRenderer = decoded.Renderer;
             _fullPreviewState.Delivering(item.File.FullPath);
@@ -1501,6 +1503,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         FullPreview?.Dispose();
         FullPreview = null;
+        IsFullPreviewDraft = false;
         _fullPreviewState.Forget();
     }
 
@@ -1644,13 +1647,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     private bool _suppressDevelopReload;
-    private CancellationTokenSource? _developDebounceCts;
+    private DevelopPreviewScheduler? _developPreview;
 
     /// <summary>
-    /// Saves the develop settings and re-renders what is on screen.
-    ///
-    /// Debounced for anything dragged: a develop takes seconds, and starting one per slider tick
-    /// would queue work faster than it could be cancelled.
+    /// Saves the develop settings and re-renders what is on screen: a quick half-size draft while the
+    /// settings are moving, the full develop once they rest. See <see cref="DevelopPreviewScheduler"/>.
     /// </summary>
     private void ApplyDevelopChange(bool debounce = false)
     {
@@ -1661,35 +1662,84 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         OnPropertyChanged(nameof(HasDevelopAdjustments));
 
-        _developDebounceCts?.Cancel();
-        _developDebounceCts?.Dispose();
-        _developDebounceCts = null;
+        // Whatever develop is running was asked for with settings that no longer apply. Left alone it
+        // would hold every core for seconds while the drafts that matter now queue behind it.
+        _fullPreviewCts?.Cancel();
 
-        if (!debounce)
+        _developPreview ??= new DevelopPreviewScheduler(
+            token => Dispatcher.UIThread.InvokeAsync(() => ShowDevelopDraftAsync(token)),
+            () => Dispatcher.UIThread.InvokeAsync(SaveAndReloadDevelopAsync));
+
+        _developPreview.Changed(dragged: debounce);
+    }
+
+    /// <summary>
+    /// Shows a draft develop of the selection with the settings as they are now. Only while a
+    /// developed picture is already on screen: the drafts replace one, and there is nothing to
+    /// replace in the grid's preview pane, which shows the embedded JPEG.
+    /// </summary>
+    private async Task ShowDevelopDraftAsync(CancellationToken cancellationToken)
+    {
+        await SaveDevelopAsync().ConfigureAwait(true);
+
+        if (FullPreview is null
+            || SelectedItem is not { } item
+            || !IsRawSelected
+            || !DevelopRawFiles
+            || cancellationToken.IsCancellationRequested)
         {
-            _ = SaveAndReloadDevelopAsync();
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        _developDebounceCts = cts;
-
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            var draft = await _fullImages.DecodeDraftAsync(item.File, cancellationToken).ConfigureAwait(true);
+
+            // Overtaken by another change, the full develop, or a different selection: drop it.
+            if (draft is null || cancellationToken.IsCancellationRequested || !ReferenceEquals(SelectedItem, item))
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(400), cts.Token).ConfigureAwait(false);
-                await Dispatcher.UIThread.InvokeAsync(SaveAndReloadDevelopAsync);
+                return;
             }
-            catch (OperationCanceledException)
+
+            var replaced = FullPreview;
+            IsFullPreviewDraft = true;
+            FullPreview = ToBitmap(draft);
+            FullPreviewRenderer = draft.Renderer;
+
+            if (replaced is not null)
             {
+                Dispatcher.UIThread.Post(replaced.Dispose, DispatcherPriority.Background);
             }
-        }, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not draw a draft of {File}", item.File.FullPath);
+        }
+    }
+
+    /// <summary>
+    /// True while the picture on screen is a half-size draft rather than the full develop. The loupe
+    /// reads its magnification from the picture's width, and a draft's would make it jump.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LoupeTargetWidth))]
+    private bool _isFullPreviewDraft;
+
+    /// <summary>Saved only when changed: every save repaints the application's theme resources.</summary>
+    private async Task SaveDevelopAsync()
+    {
+        if (_settings.Current.RawDevelop != CurrentDevelop)
+        {
+            await _settings.SaveAsync(_settings.Current with { RawDevelop = CurrentDevelop }).ConfigureAwait(true);
+        }
     }
 
     private async Task SaveAndReloadDevelopAsync()
     {
-        await _settings.SaveAsync(_settings.Current with { RawDevelop = CurrentDevelop }).ConfigureAwait(true);
+        await SaveDevelopAsync().ConfigureAwait(true);
 
         // Same file, different rendering: the request guard has to be cleared or nothing happens.
         InvalidateFullPreviewRequest();
@@ -2306,6 +2356,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     partial void OnSelectedItemChanged(MediaItemViewModel? value)
     {
+        // A draft or develop still waiting on a slider was for the picture being left behind. The
+        // settings it would have saved are not: they apply to every RAW, this next one included.
+        if (_developPreview is not null)
+        {
+            _developPreview.Cancel();
+            _ = SaveDevelopAsync();
+        }
+
         ShowFfmpegNotice = value is { IsVideo: true } && !_ffmpeg.IsAvailable;
         IsVideoSelected = value is { IsVideo: true } && _ffmpeg.IsAvailable;
         OnPropertyChanged(nameof(IsRawSelected));
