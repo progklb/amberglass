@@ -37,8 +37,11 @@ public sealed class ThumbnailCache
     ///
     /// 1: a stitched panorama's transparency mask is applied, turning its dead space black rather
     /// than the white its preview was painted with.
+    ///
+    /// 2: the largest rendered preview inside the DNG is used, so tiles that were developed by
+    /// ImageIO for want of a large enough preview are now Lightroom's own rendering, edits included.
     /// </summary>
-    private const int DngRendererVersion = 1;
+    private const int DngRendererVersion = 2;
 
     public string GetCacheKey(MediaFile file, int maxEdgePixels)
     {

@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.IO.Compression;
 using Amberglass.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -24,40 +23,12 @@ public interface ITransparencyMaskReader
 /// and ImageIO both develop the raw data straight through the mask, and the embedded preview has the
 /// dead space flattened to white — so it is found here and applied afterwards.
 ///
-/// A small TIFF walker rather than a library: only IFD0's SubIFDs are visited, and only the tags
-/// that locate and describe the mask are read. Strips and tiles are both handled, uncompressed or
-/// Deflate in managed code, and JPEG XL — which is what Lightroom actually writes — through the
-/// platform decoder where there is one.
+/// Only IFD0's SubIFDs are visited (see <see cref="TiffReader"/>). Strips and tiles are both
+/// handled, uncompressed or Deflate in managed code, and JPEG XL — which is what Lightroom actually
+/// writes — through the platform decoder where there is one.
 /// </summary>
 public sealed class DngTransparencyMaskReader : ITransparencyMaskReader
 {
-    private const ushort TagNewSubfileType = 254;
-    private const ushort TagImageWidth = 256;
-    private const ushort TagImageLength = 257;
-    private const ushort TagBitsPerSample = 258;
-    private const ushort TagCompression = 259;
-    private const ushort TagStripOffsets = 273;
-    private const ushort TagOrientation = 274;
-    private const ushort TagRowsPerStrip = 278;
-    private const ushort TagStripByteCounts = 279;
-    private const ushort TagPredictor = 317;
-    private const ushort TagTileWidth = 322;
-    private const ushort TagTileLength = 323;
-    private const ushort TagTileOffsets = 324;
-    private const ushort TagTileByteCounts = 325;
-    private const ushort TagSubIfds = 330;
-
-    /// <summary>NewSubfileType bit 2: this image is a transparency mask.</summary>
-    private const uint TransparencyMaskBit = 4;
-
-    private const ushort CompressionNone = 1;
-    private const ushort CompressionDeflate = 8;
-    private const ushort CompressionAdobeDeflate = 32946;
-    private const ushort CompressionJpegXl = 52546;
-
-    /// <summary>A file claiming more IFDs or entries than this is damaged, not ambitious.</summary>
-    private const int MaxEntries = 4096;
-
     private readonly IJpegXlDecoder? _jpegXl;
     private readonly ILogger<DngTransparencyMaskReader> _logger;
 
@@ -102,12 +73,12 @@ public sealed class DngTransparencyMaskReader : ITransparencyMaskReader
         }
 
         var ifd0 = tiff.ReadIfd(tiff.FirstIfdOffset);
-        var orientation = (int)ifd0.Single(TagOrientation, 1);
+        var orientation = (int)ifd0.Single(TiffTags.Orientation, 1);
 
-        var masks = ifd0.Values(TagSubIfds)
+        var masks = ifd0.Values(TiffTags.SubIfds)
             .Select(offset => tiff.ReadIfd(offset))
-            .Where(ifd => (ifd.Single(TagNewSubfileType) & TransparencyMaskBit) != 0)
-            .Select(ifd => (Ifd: ifd, Width: (int)ifd.Single(TagImageWidth), Height: (int)ifd.Single(TagImageLength)))
+            .Where(ifd => (ifd.Single(TiffTags.NewSubfileType) & TiffTags.TransparencyMaskBit) != 0)
+            .Select(ifd => (Ifd: ifd, Width: (int)ifd.Single(TiffTags.ImageWidth), Height: (int)ifd.Single(TiffTags.ImageLength)))
             .Where(m => m.Width > 0 && m.Height > 0)
             .OrderBy(m => Math.Max(m.Width, m.Height))
             .ToList();
@@ -128,85 +99,16 @@ public sealed class DngTransparencyMaskReader : ITransparencyMaskReader
         return values is null ? null : new TransparencyMask(values, chosen.Width, chosen.Height, orientation);
     }
 
-    private byte[]? Decode(TiffReader tiff, Ifd ifd, int width, int height)
+    private byte[]? Decode(TiffReader tiff, TiffIfd ifd, int width, int height)
     {
-        var bits = (int)ifd.Single(TagBitsPerSample, 8);
-        var compression = (ushort)ifd.Single(TagCompression, CompressionNone);
-        var predictor = (int)ifd.Single(TagPredictor, 1);
+        var bits = (int)ifd.Single(TiffTags.BitsPerSample, 8);
+        var compression = (ushort)ifd.Single(TiffTags.Compression, TiffTags.CompressionNone);
+        var predictor = (int)ifd.Single(TiffTags.Predictor, 1);
 
-        if (bits is not (8 or 16))
-        {
-            return null;
-        }
-
-        // Strips are tiles the width of the image, so both are read the same way.
-        IReadOnlyList<uint> offsets, counts;
-        int chunkWidth, chunkHeight;
-
-        if (ifd.Has(TagTileOffsets))
-        {
-            offsets = ifd.Values(TagTileOffsets);
-            counts = ifd.Values(TagTileByteCounts);
-            chunkWidth = (int)ifd.Single(TagTileWidth);
-            chunkHeight = (int)ifd.Single(TagTileLength);
-        }
-        else
-        {
-            offsets = ifd.Values(TagStripOffsets);
-            counts = ifd.Values(TagStripByteCounts);
-            chunkWidth = width;
-            chunkHeight = (int)Math.Min(ifd.Single(TagRowsPerStrip, (uint)height), (uint)height);
-        }
-
-        if (chunkWidth <= 0 || chunkHeight <= 0 || offsets.Count == 0 || offsets.Count != counts.Count)
-        {
-            return null;
-        }
-
-        var across = (width + chunkWidth - 1) / chunkWidth;
-        var down = (height + chunkHeight - 1) / chunkHeight;
-        var chunks = Math.Min(offsets.Count, across * down);
-
-        // Read in order from the one stream, then decode in parallel: a full-resolution mask is
-        // dozens of tiles, each its own JPEG XL codestream, and one at a time that was most of a
-        // second added to every visit — longer than the cached rendition it is applied to.
-        var encoded = new byte[chunks][];
-        for (var i = 0; i < chunks; i++)
-        {
-            encoded[i] = tiff.ReadBytes(offsets[i], counts[i]);
-        }
-
-        var mask = new byte[(long)width * height];
-        var failed = 0;
-
-        Parallel.For(0, chunks, (i, state) =>
-        {
-            var chunk = DecodeChunk(encoded[i], compression, predictor, bits, tiff.LittleEndian, chunkWidth, chunkHeight);
-            if (chunk is null)
-            {
-                Interlocked.Exchange(ref failed, 1);
-                state.Stop();
-                return;
-            }
-
-            // Each chunk owns its own rectangle of the mask, so the copies never overlap.
-            var left = i % across * chunkWidth;
-            var top = i / across * chunkHeight;
-            var rows = Math.Min(chunkHeight, height - top);
-            var columns = Math.Min(chunkWidth, width - left);
-
-            for (var row = 0; row < rows; row++)
-            {
-                chunk.AsSpan(row * chunkWidth, columns).CopyTo(mask.AsSpan(((top + row) * width) + left, columns));
-            }
-        });
-
-        if (failed != 0)
-        {
-            return null;
-        }
-
-        return mask;
+        return bits is 8 or 16
+            ? TiffChunks.Assemble(tiff, ifd, width, height, bytesPerPixel: 1, (encoded, chunkWidth, chunkHeight) =>
+                DecodeChunk(encoded, compression, predictor, bits, tiff.LittleEndian, chunkWidth, chunkHeight))
+            : null;
     }
 
     /// <summary>One tile or strip as 8-bit values, <paramref name="width"/> × <paramref name="height"/>.</summary>
@@ -215,7 +117,7 @@ public sealed class DngTransparencyMaskReader : ITransparencyMaskReader
     {
         var fullHeight = height;
 
-        if (compression == CompressionJpegXl)
+        if (compression == TiffTags.CompressionJpegXl)
         {
             return _jpegXl?.DecodeGrey(encoded, width, height);
         }
@@ -223,11 +125,11 @@ public sealed class DngTransparencyMaskReader : ITransparencyMaskReader
         byte[] raw;
         switch (compression)
         {
-            case CompressionNone:
+            case TiffTags.CompressionNone:
                 raw = encoded;
                 break;
 
-            case CompressionDeflate or CompressionAdobeDeflate:
+            case TiffTags.CompressionDeflate or TiffTags.CompressionAdobeDeflate:
                 using (var inflater = new ZLibStream(new MemoryStream(encoded), CompressionMode.Decompress))
                 using (var output = new MemoryStream())
                 {
@@ -282,125 +184,5 @@ public sealed class DngTransparencyMaskReader : ITransparencyMaskReader
         }
 
         return chunk;
-    }
-
-    /// <summary>The tags of one image file directory, each as its list of values.</summary>
-    private sealed class Ifd(Dictionary<ushort, uint[]> tags)
-    {
-        public bool Has(ushort tag) => tags.ContainsKey(tag);
-
-        public IReadOnlyList<uint> Values(ushort tag) => tags.TryGetValue(tag, out var values) ? values : [];
-
-        public uint Single(ushort tag, uint fallback = 0)
-            => tags.TryGetValue(tag, out var values) && values.Length > 0 ? values[0] : fallback;
-    }
-
-    /// <summary>Just enough of classic TIFF to walk IFDs and read integer tags.</summary>
-    private sealed class TiffReader
-    {
-        private readonly Stream _stream;
-        private readonly bool _littleEndian;
-
-        public TiffReader(Stream stream)
-        {
-            _stream = stream;
-
-            var header = ReadBytes(0, 8);
-            if (header.Length < 8)
-            {
-                return;
-            }
-
-            _littleEndian = header[0] == 'I' && header[1] == 'I';
-            var bigEndian = header[0] == 'M' && header[1] == 'M';
-
-            IsValid = (_littleEndian || bigEndian) && U16(header, 2) == 42;
-            FirstIfdOffset = IsValid ? U32(header, 4) : 0;
-        }
-
-        public bool IsValid { get; }
-
-        public bool LittleEndian => _littleEndian;
-
-        public uint FirstIfdOffset { get; }
-
-        public Ifd ReadIfd(uint offset)
-        {
-            var tags = new Dictionary<ushort, uint[]>();
-
-            var countBytes = ReadBytes(offset, 2);
-            if (countBytes.Length < 2)
-            {
-                return new Ifd(tags);
-            }
-
-            var count = Math.Min((int)U16(countBytes, 0), MaxEntries);
-            var entries = ReadBytes(offset + 2, (uint)(count * 12));
-
-            for (var i = 0; i + 12 <= entries.Length; i += 12)
-            {
-                var tag = U16(entries, i);
-                var type = U16(entries, i + 2);
-                var valueCount = U32(entries, i + 4);
-
-                var size = type switch
-                {
-                    1 or 6 or 7 => 1, // BYTE, SBYTE, UNDEFINED
-                    3 or 8 => 2,      // SHORT, SSHORT
-                    4 or 9 or 13 => 4, // LONG, SLONG, IFD
-                    _ => 0            // Rationals, strings and the rest: nothing the mask needs.
-                };
-
-                if (size == 0 || valueCount == 0 || valueCount > 1_000_000)
-                {
-                    continue;
-                }
-
-                var total = (uint)(size * valueCount);
-                var data = total <= 4 ? entries.AsSpan(i + 8, 4).ToArray() : ReadBytes(U32(entries, i + 8), total);
-                if (data.Length < total)
-                {
-                    continue;
-                }
-
-                var values = new uint[valueCount];
-                for (var v = 0; v < valueCount; v++)
-                {
-                    values[v] = size switch
-                    {
-                        1 => data[v],
-                        2 => U16(data, v * 2),
-                        _ => U32(data, v * 4)
-                    };
-                }
-
-                tags[tag] = values;
-            }
-
-            return new Ifd(tags);
-        }
-
-        public byte[] ReadBytes(uint offset, uint count)
-        {
-            if (offset >= _stream.Length)
-            {
-                return [];
-            }
-
-            var length = (int)Math.Min(count, _stream.Length - offset);
-            var buffer = new byte[length];
-
-            _stream.Position = offset;
-            _stream.ReadExactly(buffer);
-            return buffer;
-        }
-
-        private ushort U16(ReadOnlySpan<byte> data, int at) => _littleEndian
-            ? BinaryPrimitives.ReadUInt16LittleEndian(data[at..])
-            : BinaryPrimitives.ReadUInt16BigEndian(data[at..]);
-
-        private uint U32(ReadOnlySpan<byte> data, int at) => _littleEndian
-            ? BinaryPrimitives.ReadUInt32LittleEndian(data[at..])
-            : BinaryPrimitives.ReadUInt32BigEndian(data[at..]);
     }
 }

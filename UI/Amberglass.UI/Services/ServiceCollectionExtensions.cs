@@ -39,11 +39,17 @@ internal static class ServiceCollectionExtensions
 
         services.AddSingleton<ThumbnailCache>();
 
-        // Stitched panoramas mark their empty corners with a mask that is JPEG XL compressed, which
-        // only ImageIO can read here. Elsewhere the reader still handles uncompressed and Deflate masks.
+        // DNGs written by Lightroom compress their masks and previews as JPEG XL, which only ImageIO
+        // can read here. Elsewhere the DNG readers still handle what is stored uncompressed, Deflate
+        // or as JPEG.
+        if (OperatingSystem.IsMacOS())
+        {
+            services.AddSingleton<IJpegXlDecoder, ImageIoJpegXlDecoder>();
+        }
+
         services.AddSingleton<ITransparencyMaskReader>(sp => new DngTransparencyMaskReader(
             sp.GetRequiredService<ILogger<DngTransparencyMaskReader>>(),
-            OperatingSystem.IsMacOS() ? new ImageIoJpegXlDecoder() : null));
+            sp.GetService<IJpegXlDecoder>()));
         // Order matters: the first generator that can handle a file wins. Skia is tried first
         // because it decodes ordinary images without spawning a process.
         services.AddSingleton<IThumbnailGenerator, SkiaImageThumbnailGenerator>();
@@ -57,14 +63,19 @@ internal static class ServiceCollectionExtensions
 
         // LibRaw first because it is the one the develop settings drive; the platform decoder picks
         // up the files it cannot unpack, which is mostly JPEG XL compressed DNG.
-        services.AddSingleton<IRawDecoder>(sp => new CompositeRawDecoder(
-            OperatingSystem.IsMacOS()
-                ? [
-                    ActivatorUtilities.CreateInstance<LibRawImageDecoder>(sp),
-                    ActivatorUtilities.CreateInstance<ImageIoRawDecoder>(sp)
-                  ]
-                : (IRawDecoder[])[ActivatorUtilities.CreateInstance<LibRawImageDecoder>(sp)],
-            sp.GetRequiredService<ILogger<CompositeRawDecoder>>()));
+        //
+        // Wrapped so a file is developed once however many callers ask: the preview pane and the
+        // viewer both want the same develop, a moment apart.
+        services.AddSingleton<IRawDecoder>(sp => new SharedRawDecoder(
+            new CompositeRawDecoder(
+                OperatingSystem.IsMacOS()
+                    ? [
+                        ActivatorUtilities.CreateInstance<LibRawImageDecoder>(sp),
+                        ActivatorUtilities.CreateInstance<ImageIoRawDecoder>(sp)
+                      ]
+                    : (IRawDecoder[])[ActivatorUtilities.CreateInstance<LibRawImageDecoder>(sp)],
+                sp.GetRequiredService<ILogger<CompositeRawDecoder>>()),
+            sp.GetRequiredService<ISettingsService>()));
         services.AddSingleton<IFullImageDecoder, SkiaFullImageDecoder>();
 
         services.AddSingleton<IVideoInfoProvider, FfprobeVideoInfoProvider>();
@@ -78,7 +89,13 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IAudioPlayer, FfmpegAudioPlayer>();
 
         services.AddSingleton<IExifToolLocator, ExifToolLocator>();
-        services.AddSingleton<IEmbeddedPreviewExtractor, ExifToolPreviewExtractor>();
+        // ExifTool extracts whatever preview a RAW carries; a DNG may hold a much larger one ExifTool
+        // does not hand over, which the wrapper reads first.
+        services.AddSingleton<ExifToolPreviewExtractor>();
+        services.AddSingleton<IEmbeddedPreviewExtractor>(sp => new DngPreviewExtractor(
+            sp.GetRequiredService<ExifToolPreviewExtractor>(),
+            sp.GetRequiredService<ILogger<DngPreviewExtractor>>(),
+            sp.GetService<IJpegXlDecoder>()));
         // One ExifTool process, shared by the reader and the writer.
         services.AddSingleton<ExifToolHost>();
         services.AddSingleton<IMetadataProvider, ExifToolMetadataProvider>();

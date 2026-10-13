@@ -128,17 +128,28 @@ public sealed class SkiaFullImageDecoder : IFullImageDecoder
     ///
     /// Applied after the render cache rather than stored in it: the cache is JPEG and would keep
     /// only black, where transparent is what lets the theme show through.
+    ///
+    /// Applied to a copy: a develop may be shared with other callers (see
+    /// <see cref="SharedRawDecoder"/>), and clearing its pixels in place would clear them for the
+    /// thumbnail being made from the same develop as well.
     /// </summary>
     /// <param name="hard">True for an embedded preview, for the reason the thumbnail renderer gives.</param>
     private DecodedImage Masked(DecodedImage image, MediaFile file, bool hard)
     {
-        if (_masks?.Read(file, Math.Max(image.Width, image.Height)) is { } mask
-            && !mask.Apply(image.Pixels, image.Width, image.Height, image.Width * 4, hard))
+        if (_masks?.Read(file, Math.Max(image.Width, image.Height)) is not { } mask)
         {
-            _logger.LogDebug(
-                "The transparency mask of {File} ({MaskWidth}x{MaskHeight}) does not fit its {Width}x{Height} picture",
-                file.FullPath, mask.Width, mask.Height, image.Width, image.Height);
+            return image;
         }
+
+        var pixels = image.Pixels.ToArray();
+        if (mask.Apply(pixels, image.Width, image.Height, image.Width * 4, hard))
+        {
+            return image with { Pixels = pixels };
+        }
+
+        _logger.LogDebug(
+            "The transparency mask of {File} ({MaskWidth}x{MaskHeight}) does not fit its {Width}x{Height} picture",
+            file.FullPath, mask.Width, mask.Height, image.Width, image.Height);
 
         return image;
     }

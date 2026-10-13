@@ -13,6 +13,12 @@ public interface IJpegXlDecoder
     /// data could not be decoded or is larger than it says it should be.
     /// </summary>
     byte[]? DecodeGrey(byte[] codestream, int width, int height);
+
+    /// <summary>
+    /// Colour as premultiplied BGRA, four bytes a pixel, <paramref name="width"/> × <paramref name="height"/>,
+    /// or null on the same terms as <see cref="DecodeGrey"/>.
+    /// </summary>
+    byte[]? DecodeBgra(byte[] codestream, int width, int height);
 }
 
 /// <summary>
@@ -30,9 +36,16 @@ public sealed class ImageIoJpegXlDecoder : IJpegXlDecoder
     /// <summary>kCGImageAlphaNone: one grey byte a pixel and nothing else.</summary>
     private const uint BitmapInfoGrey = 0;
 
+    /// <summary>BGRA, premultiplied, little-endian — what the rest of the pipeline works in.</summary>
+    private const uint BitmapInfoBgraPremultiplied = 2 | (2u << 12);
+
     public bool IsAvailable => OperatingSystem.IsMacOS();
 
-    public unsafe byte[]? DecodeGrey(byte[] codestream, int width, int height)
+    public byte[]? DecodeGrey(byte[] codestream, int width, int height) => Decode(codestream, width, height, colour: false);
+
+    public byte[]? DecodeBgra(byte[] codestream, int width, int height) => Decode(codestream, width, height, colour: true);
+
+    private unsafe byte[]? Decode(byte[] codestream, int width, int height, bool colour)
     {
         if (codestream.Length == 0 || width <= 0 || height <= 0)
         {
@@ -72,13 +85,15 @@ public sealed class ImageIoJpegXlDecoder : IJpegXlDecoder
             // bottom-left, hence the offset.
             // Rows aligned the way Core Graphics wants them, as the RAW decoder learned the hard way,
             // then copied out tightly.
-            var stride = ImageIoRawDecoder.AlignStride(width);
+            var bytesPerPixel = colour ? 4 : 1;
+            var stride = ImageIoRawDecoder.AlignStride(width * bytesPerPixel);
             var aligned = new byte[stride * height];
-            colorSpace = CGColorSpaceCreateDeviceGray();
+            colorSpace = colour ? CGColorSpaceCreateDeviceRGB() : CGColorSpaceCreateDeviceGray();
 
             fixed (byte* buffer = aligned)
             {
-                context = CGBitmapContextCreate((IntPtr)buffer, width, height, 8, stride, colorSpace, BitmapInfoGrey);
+                context = CGBitmapContextCreate(
+                    (IntPtr)buffer, width, height, 8, stride, colorSpace, colour ? BitmapInfoBgraPremultiplied : BitmapInfoGrey);
                 if (context == IntPtr.Zero)
                 {
                     return null;
@@ -88,10 +103,11 @@ public sealed class ImageIoJpegXlDecoder : IJpegXlDecoder
                     context, new CGRect(0, height - decodedHeight, decodedWidth, decodedHeight), image);
             }
 
-            var pixels = new byte[width * height];
+            var rowBytes = width * bytesPerPixel;
+            var pixels = new byte[rowBytes * height];
             for (var row = 0; row < height; row++)
             {
-                aligned.AsSpan(row * stride, width).CopyTo(pixels.AsSpan(row * width, width));
+                aligned.AsSpan(row * stride, rowBytes).CopyTo(pixels.AsSpan(row * rowBytes, rowBytes));
             }
 
             return pixels;
@@ -157,6 +173,9 @@ public sealed class ImageIoJpegXlDecoder : IJpegXlDecoder
 
     [DllImport(CoreGraphics)]
     private static extern IntPtr CGColorSpaceCreateDeviceGray();
+
+    [DllImport(CoreGraphics)]
+    private static extern IntPtr CGColorSpaceCreateDeviceRGB();
 
     [DllImport(CoreGraphics)]
     private static extern void CGColorSpaceRelease(IntPtr space);

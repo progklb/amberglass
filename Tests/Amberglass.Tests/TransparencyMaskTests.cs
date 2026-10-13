@@ -103,80 +103,18 @@ public class TransparencyMaskTests
 
     private sealed record SubImage(uint SubfileType, int Width, int Height, byte[] Data, ushort Compression = 1);
 
-    /// <summary>
-    /// The smallest TIFF that looks like a DNG to the reader: IFD0 with an orientation and SubIFDs,
-    /// each sub-image a single strip. Little-endian, as Lightroom writes them.
-    /// </summary>
+    /// <summary>A DNG with an orientation in IFD0 and each sub-image as a single 8-bit strip.</summary>
     private static byte[] Dng(int orientation, params SubImage[] images)
-    {
-        const int EntrySize = 12;
-        const int SubEntries = 8;
-
-        var ifd0Size = 2 + (2 * EntrySize) + 4;
-        var arrayOffset = 8 + ifd0Size;
-        var firstSubIfd = arrayOffset + (images.Length > 1 ? 4 * images.Length : 0);
-        var subIfdSize = 2 + (SubEntries * EntrySize) + 4;
-        var dataOffset = firstSubIfd + (images.Length * subIfdSize);
-
-        var subOffsets = images.Select((_, i) => (uint)(firstSubIfd + (i * subIfdSize))).ToArray();
-        var dataOffsets = new uint[images.Length];
-        var next = dataOffset;
-        for (var i = 0; i < images.Length; i++)
-        {
-            dataOffsets[i] = (uint)next;
-            next += images[i].Data.Length;
-        }
-
-        using var memory = new MemoryStream();
-        using var writer = new BinaryWriter(memory);
-
-        void Entry(ushort tag, ushort type, uint count, uint value)
-        {
-            writer.Write(tag);
-            writer.Write(type);
-            writer.Write(count);
-            writer.Write(value);
-        }
-
-        writer.Write("II"u8);
-        writer.Write((ushort)42);
-        writer.Write(8u);
-
-        writer.Write((ushort)2);
-        Entry(274, 3, 1, (uint)orientation);
-        Entry(330, 4, (uint)images.Length, images.Length > 1 ? (uint)arrayOffset : subOffsets[0]);
-        writer.Write(0u);
-
-        if (images.Length > 1)
-        {
-            foreach (var offset in subOffsets)
-            {
-                writer.Write(offset);
-            }
-        }
-
-        for (var i = 0; i < images.Length; i++)
-        {
-            var image = images[i];
-            writer.Write((ushort)SubEntries);
-            Entry(254, 4, 1, image.SubfileType);
-            Entry(256, 4, 1, (uint)image.Width);
-            Entry(257, 4, 1, (uint)image.Height);
-            Entry(258, 3, 1, 8);
-            Entry(259, 3, 1, image.Compression);
-            Entry(273, 4, 1, dataOffsets[i]);
-            Entry(278, 4, 1, (uint)image.Height);
-            Entry(279, 4, 1, (uint)image.Data.Length);
-            writer.Write(0u);
-        }
-
-        foreach (var image in images)
-        {
-            writer.Write(image.Data);
-        }
-
-        return memory.ToArray();
-    }
+        => TestDng.Build(
+            new TestDng.Image([], new TestDng.Entry(274, TestDng.Short, (uint)orientation)),
+            images.Select(image => new TestDng.Image(
+                image.Data,
+                new TestDng.Entry(254, TestDng.Long, image.SubfileType),
+                new TestDng.Entry(256, TestDng.Long, (uint)image.Width),
+                new TestDng.Entry(257, TestDng.Long, (uint)image.Height),
+                new TestDng.Entry(258, TestDng.Short, 8),
+                new TestDng.Entry(259, TestDng.Short, image.Compression),
+                new TestDng.Entry(278, TestDng.Long, (uint)image.Height))).ToArray());
 
     private static byte[] Filled(int count, byte value) => Enumerable.Repeat(value, count).ToArray();
 

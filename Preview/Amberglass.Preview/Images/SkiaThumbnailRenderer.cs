@@ -75,8 +75,14 @@ internal static class SkiaThumbnailRenderer
             cancellationToken.ThrowIfCancellationRequested();
 
             using var resized = ResizeIfNeeded(source, maxEdgePixels);
-            mask?.Apply(resized ?? source);
-            return Encode(resized ?? source);
+
+            // The source wraps the caller's pixels, which may be a develop shared with others, so a
+            // mask is only ever applied to a bitmap of our own.
+            using var masked = mask is not null && resized is null ? source.Copy() : null;
+            var target = resized ?? masked ?? source;
+
+            mask?.Apply(target);
+            return Encode(target);
         }
         finally
         {
