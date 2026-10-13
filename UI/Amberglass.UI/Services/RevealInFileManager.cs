@@ -12,18 +12,22 @@ namespace Amberglass.UI.Services;
 /// </summary>
 public static class RevealInFileManager
 {
-    /// <summary>Named after whatever the platform calls its file manager, so the menu reads right.</summary>
-    public static string MenuHeader { get; } = OperatingSystem.IsMacOS()
-        ? "Reveal in Finder"
-        : OperatingSystem.IsWindows() ? "Show in Explorer" : "Show in File Manager";
-
     /// <summary>
-    /// The folder tree's wording. "Open" rather than "Reveal" because it is the honest description:
-    /// the folder is shown from the inside, not picked out from among its neighbours.
+    /// One wording for every "take me to this on disk" item — tiles, the preview, the folder tree,
+    /// the inspector — named after whatever the platform calls its file manager.
+    ///
+    /// "Show" rather than "Reveal" or "Open" because it is true of both things it does: a file is
+    /// shown selected among its siblings, a folder is shown from the inside. The menus used to say
+    /// "Reveal" for one and "Open" for the other, which read as two different features.
     /// </summary>
-    public static string OpenFolderMenuHeader { get; } = OperatingSystem.IsMacOS()
-        ? "Open in Finder"
-        : OperatingSystem.IsWindows() ? "Open in Explorer" : "Open in File Manager";
+    public static string MenuHeader { get; } = HeaderFor(Current);
+
+    internal static string HeaderFor(PlatformKind platform) => platform switch
+    {
+        PlatformKind.MacOS => "Show in Finder",
+        PlatformKind.Windows => "Show in File Explorer",
+        _ => "Show in File Manager"
+    };
 
     /// <summary>
     /// The command that selects <paramref name="path"/> in the platform's file manager. Separated

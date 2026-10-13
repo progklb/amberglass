@@ -27,6 +27,23 @@
   -->
 
   <Window.Styles>
+    <!--
+      A small tag set against text: the XMP marker after the file name. Outlined rather than filled
+      so it reads as a label on the name, not a button beside it.
+    -->
+    <Style Selector="Border.pill">
+      <Setter Property="BorderBrush" Value="#55FFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="Background" Value="#14FFFFFF" />
+    </Style>
+    <Style Selector="Border.pill > TextBlock">
+      <Setter Property="FontSize" Value="9" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Opacity" Value="0.85" />
+    </Style>
+
     <!-- A button that reads as text until the pointer finds it. -->
     <Style Selector="Button.link">
       <Setter Property="Background" Value="Transparent" />
@@ -822,7 +839,9 @@
               <Border Background="Transparent" ContextRequested="OnFolderContextRequested">
                 <Border.ContextMenu>
                   <ContextMenu>
-                    <MenuItem Header="{x:Static svc:RevealInFileManager.OpenFolderMenuHeader}"
+                    <MenuItem Header="Open as Workspace" Click="OnOpenFolderAsWorkspace" />
+                    <Separator />
+                    <MenuItem Header="{x:Static svc:RevealInFileManager.MenuHeader}"
                               Click="OnOpenFolderInFileManager" />
                   </ContextMenu>
                 </Border.ContextMenu>
@@ -1307,9 +1326,41 @@
       <DockPanel IsVisible="{Binding !IsMultiSelection}">
         <Border DockPanel.Dock="Top" Padding="12,10" BorderThickness="0,0,0,1" BorderBrush="#18FFFFFF"
                 IsVisible="{Binding SelectedItem, Converter={x:Static ObjectConverters.IsNotNull}}">
-          <StackPanel DataContext="{Binding SelectedItem}" x:DataType="vm:MediaItemViewModel" Spacing="2">
-            <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextWrapping="Wrap" />
-            <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap">
+          <StackPanel Spacing="2">
+            <!--
+              The name, with the sidecar flagged at the end of it rather than spelled out at the
+              bottom of the panel. The full paths are a hover away: the file's on the name, the
+              sidecar's on the pill. Each right-clicks to the file manager — the pill to the sidecar,
+              which sits beside the file, so either lands in the same folder.
+
+              One TextBlock with the pill inline, so a long name wraps and the pill follows the last
+              word instead of dropping to a line of its own.
+            -->
+            <TextBlock FontWeight="SemiBold" TextWrapping="Wrap"
+                       ToolTip.Tip="{Binding SelectedItem.File.FullPath}">
+              <TextBlock.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="{x:Static svc:RevealInFileManager.MenuHeader}"
+                            Click="OnRevealSelectedFile" />
+                </ContextMenu>
+              </TextBlock.ContextMenu>
+              <Run Text="{Binding SelectedItem.FileName}" />
+              <InlineUIContainer BaselineAlignment="Center">
+                <Border Classes="pill" Margin="6,0,0,0"
+                        IsVisible="{Binding Inspector.HasSidecar}"
+                        ToolTip.Tip="{Binding Inspector.SidecarPath}">
+                  <Border.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="{x:Static svc:RevealInFileManager.MenuHeader}"
+                                Click="OnRevealSidecar" />
+                    </ContextMenu>
+                  </Border.ContextMenu>
+                  <TextBlock Text="XMP" />
+                </Border>
+              </InlineUIContainer>
+            </TextBlock>
+            <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                       DataContext="{Binding SelectedItem}" x:DataType="vm:MediaItemViewModel">
               <TextBlock.Text>
                 <MultiBinding StringFormat="{}{0} · {1} · {2}">
                   <Binding Path="File.MediaType" />
@@ -1318,7 +1369,6 @@
                 </MultiBinding>
               </TextBlock.Text>
             </TextBlock>
-            <TextBlock Text="{Binding File.FullPath}" FontSize="10" Opacity="0.4" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
 

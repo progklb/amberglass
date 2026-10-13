@@ -964,6 +964,24 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>The inspector header's name: the selected file, which is the one the header describes.</summary>
+    private void OnRevealSelectedFile(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { SelectedItem: { } item })
+        {
+            RevealInFileManager.Reveal(item.File.FullPath);
+        }
+    }
+
+    /// <summary>The inspector header's XMP pill: the sidecar itself, selected beside its file.</summary>
+    private void OnRevealSidecar(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { Inspector.SidecarPath: { } sidecar })
+        {
+            RevealInFileManager.Reveal(sidecar);
+        }
+    }
+
     /// <summary>The folder a tree context-menu click came from, or null for a placeholder row.</summary>
     private static FolderNodeViewModel? FolderFor(object? sender)
         => (sender as Control)?.DataContext as FolderNodeViewModel is { IsPlaceholder: false } folder
@@ -990,6 +1008,18 @@ public partial class MainWindow : Window
     /// Opens the right-clicked folder, which need not be the selected one — the menu carries the
     /// row's DataContext, so it works on a folder that was never clicked into.
     /// </summary>
+    /// <summary>
+    /// Makes the right-clicked folder the workspace, as File › Open Folder would, without going
+    /// through a picker to find a folder already on screen.
+    /// </summary>
+    private void OnOpenFolderAsWorkspace(object? sender, RoutedEventArgs e)
+    {
+        if (FolderFor(sender) is { } folder && DataContext is MainWindowViewModel viewModel)
+        {
+            _ = viewModel.OpenPathAsync(folder.FullPath);
+        }
+    }
+
     private void OnOpenFolderInFileManager(object? sender, RoutedEventArgs e)
     {
         if (FolderFor(sender) is { } folder)

@@ -200,10 +200,6 @@
                    Text="{Binding WriteStatus}"
                    Foreground="{Binding WriteFailed, Converter={StaticResource StatusBrush}}" />
 
-        <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
-                   IsVisible="{Binding HasSidecar}"
-                   Text="{Binding SidecarPath, StringFormat='XMP sidecar: {0}'}" />
-
         <ProgressBar IsIndeterminate="True" Height="3"
                      IsVisible="{Binding IsLoading}" />
         <ProgressBar IsIndeterminate="True" Height="3"

@@ -318,7 +318,11 @@ public class RevealInFileManagerTests
 
     [Fact]
     public void The_menu_names_the_platform_s_own_file_manager()
-        => Assert.Contains(RevealInFileManager.MenuHeader, (string[])["Reveal in Finder", "Show in Explorer", "Show in File Manager"]);
+    {
+        Assert.Equal("Show in Finder", RevealInFileManager.HeaderFor(RevealInFileManager.PlatformKind.MacOS));
+        Assert.Equal("Show in File Explorer", RevealInFileManager.HeaderFor(RevealInFileManager.PlatformKind.Windows));
+        Assert.Equal("Show in File Manager", RevealInFileManager.HeaderFor(RevealInFileManager.PlatformKind.Other));
+    }
 }
 
 public class OpenFolderInFileManagerTests
@@ -362,13 +366,13 @@ public class OpenFolderInFileManagerTests
         }
     }
 
+    /// <summary>
+    /// Files and folders share one wording. They used to say "Reveal" and "Open", which read as two
+    /// different features for what is one: take me to this on disk.
+    /// </summary>
     [Fact]
-    public void The_menu_says_open_rather_than_reveal()
-    {
-        Assert.Contains(
-            RevealInFileManager.OpenFolderMenuHeader,
-            (string[])["Open in Finder", "Open in Explorer", "Open in File Manager"]);
-
-        Assert.NotEqual(RevealInFileManager.MenuHeader, RevealInFileManager.OpenFolderMenuHeader);
-    }
+    public void Every_platform_uses_the_same_verb()
+        => Assert.All(
+            Enum.GetValues<RevealInFileManager.PlatformKind>(),
+            platform => Assert.StartsWith("Show in ", RevealInFileManager.HeaderFor(platform)));
 }
