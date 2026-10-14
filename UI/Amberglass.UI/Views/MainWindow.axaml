@@ -857,7 +857,7 @@
                   name, selected or not, which is where the eye is when pointing at a row.
                 -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                  <Panel Width="28" Height="24" IsVisible="{Binding !IsPlaceholder}">
+                  <Panel Width="28" Height="24" VerticalAlignment="Center" IsVisible="{Binding !IsPlaceholder}">
                     <controls:RoughMark HoverKind="None"
                                         IsSelected="{Binding $parent[TreeViewItem].IsSelected}" />
                     <PathIcon Width="14" Height="14" Opacity="0.55"
@@ -873,9 +873,9 @@
                     pointed at while the pointer is over any of its children, which underlined every
                     parent of the row actually under the pointer.
                   -->
-                  <Panel>
+                  <Panel VerticalAlignment="Center">
                     <controls:RoughMark IsHovered="{Binding #FolderRow.IsPointerOver}" />
-                    <TextBlock Text="{Binding Name}" Margin="4,3,10,3" />
+                    <TextBlock Text="{Binding Name}" Margin="4,3,10,3" VerticalAlignment="Center" />
                   </Panel>
                 </StackPanel>
               </Border>
