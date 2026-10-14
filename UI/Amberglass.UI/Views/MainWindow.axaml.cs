@@ -75,6 +75,8 @@ public partial class MainWindow : Window
 
             viewModel.Inspector.CompareConflictsRequested -= OnCompareConflicts;
             viewModel.Inspector.CompareConflictsRequested += OnCompareConflicts;
+            viewModel.Inspector.OpenSyncRequested -= OnInspectorOpenSync;
+            viewModel.Inspector.OpenSyncRequested += OnInspectorOpenSync;
 
             // Order matters: the panes have to be in the right rows before the filmstrip decides
             // which row carries the star.
@@ -293,7 +295,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new SyncWindow { DataContext = factory() };
+        var sync = factory();
+        if (DataContext is MainWindowViewModel current)
+        {
+            sync.WorkspacePath = current.WorkspacePath;
+        }
+
+        var window = new SyncWindow { DataContext = sync };
         await window.ShowDialog(this);
 
         // Sync clears whatever it committed, so the grid's badges need refreshing.
@@ -302,6 +310,8 @@ public partial class MainWindow : Window
             viewModel.RefreshAfterSync();
         }
     }
+
+    private void OnInspectorOpenSync() => OnOpenSync(null, new RoutedEventArgs());
 
     private void OnOpenChanges(object? sender, RoutedEventArgs e) => _ = ReviewChangesAsync(quitting: false);
 

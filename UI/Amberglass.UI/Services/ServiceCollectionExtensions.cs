@@ -106,6 +106,10 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IPendingChangeStore>(sp =>
             new PendingChangeStore(sp.GetRequiredService<PendingChangeJournal>()));
         services.AddSingleton<IBatchMetadataService, BatchMetadataService>();
+        // Files to embed at the next Sync, asked for one at a time from the inspector. Kept on disk
+        // like the pending edits, so a request outlives the session it was made in.
+        services.AddSingleton<IEmbedQueue>(sp => new EmbedQueue(
+            sp.GetRequiredService<IAppPaths>(), sp.GetRequiredService<ILogger<EmbedQueue>>()));
         services.AddSingleton<ISyncService, SyncService>();
         services.AddSingleton<ICatalog, SqliteCatalog>();
         services.AddSingleton<ICatalogIndexer, CatalogIndexer>();

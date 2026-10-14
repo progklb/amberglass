@@ -44,6 +44,7 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly IKeywordClipboard _clipboard;
     private readonly ILogger<MetadataInspectorViewModel> _logger;
+    private readonly IEmbedQueue _embedQueue;
 
     private CancellationTokenSource? _loadCts;
     private MediaItemViewModel? _item;
@@ -63,7 +64,8 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
         IKeywordLibraryService library,
         ISettingsService settings,
         IKeywordClipboard clipboard,
-        ILogger<MetadataInspectorViewModel> logger)
+        ILogger<MetadataInspectorViewModel> logger,
+        IEmbedQueue? embedQueue = null)
     {
         _metadata = metadata;
         _writer = writer;
@@ -72,6 +74,10 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
         _settings = settings;
         _clipboard = clipboard;
         _logger = logger;
+        _embedQueue = embedQueue ?? new EmbedQueue();
+
+        // Sync takes files off the queue from a background thread as it embeds them.
+        _embedQueue.Changed += (_, _) => Dispatcher.UIThread.Post(RefreshEmbedQueued);
 
         // Rebuilt rather than patched: editing the library in Settings can change anything about it,
         // and the tick list is cheap to make.
@@ -525,7 +531,78 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
     private bool _hasPendingChanges;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowSidecarAhead))]
     private bool _hasConflicts;
+
+    // ---- Sidecar ahead of the file ---------------------------------------------------------------
+
+    /// <summary>
+    /// What the sidecar says that the file itself does not, for a file that can be written into.
+    ///
+    /// The ordinary state of every JPEG or video after its sidecar is written — not a problem, so not
+    /// a warning, but worth knowing: an application that ignores sidecars sees only the file's own
+    /// values. Proprietary raw is left out, because for those the sidecar is the record by design
+    /// and a callout would sit there forever.
+    /// </summary>
+    public ObservableCollection<object> SidecarAheadRows { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowSidecarAhead))]
+    private bool _isSidecarAhead;
+
+    /// <summary>The user has asked for this file to be embedded at the next Sync.</summary>
+    [ObservableProperty]
+    private bool _isQueuedForEmbed;
+
+    /// <summary>A conflict says the same thing more urgently, and asks a question first.</summary>
+    public bool ShowSidecarAhead => IsSidecarAhead && !HasConflicts;
+
+    /// <summary>Raised when the user wants the Sync window, which the main window owns.</summary>
+    public event Action? OpenSyncRequested;
+
+    /// <summary>Queues the file and opens Sync on it, so the request is seen before it is acted on.</summary>
+    [RelayCommand]
+    private void EmbedIntoFile()
+    {
+        if (_item is null)
+        {
+            return;
+        }
+
+        _embedQueue.Add(_item.File.FullPath);
+        OpenSyncRequested?.Invoke();
+    }
+
+    [RelayCommand]
+    private void OpenSync() => OpenSyncRequested?.Invoke();
+
+    [RelayCommand]
+    private void CancelEmbed()
+    {
+        if (_item is not null)
+        {
+            _embedQueue.Remove(_item.File.FullPath);
+        }
+    }
+
+    private void RefreshEmbedQueued()
+        => IsQueuedForEmbed = _item is not null && _embedQueue.Contains(_item.File.FullPath);
+
+    private void ShowSidecarAheadOf(MediaMetadata metadata, string filePath)
+    {
+        SidecarAheadRows.Clear();
+
+        if (MediaTypeRegistry.CanEmbedMetadata(filePath))
+        {
+            foreach (var row in DiffRows.From(MetadataDiff.SidecarOverFile(metadata)))
+            {
+                SidecarAheadRows.Add(row);
+            }
+        }
+
+        IsSidecarAhead = SidecarAheadRows.Count > 0;
+        RefreshEmbedQueued();
+    }
 
     [ObservableProperty]
     private bool _isWriting;
@@ -780,6 +857,8 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
             HasConflicts = Conflicts.Count > 0;
             item.HasConflicts = HasConflicts;
             item.HasSidecar = metadata.HasSidecar;
+
+            ShowSidecarAheadOf(metadata, item.File.FullPath);
         }
         catch (OperationCanceledException)
         {
@@ -1120,6 +1199,9 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
         RawTags.Clear();
         RebuildRawTagGroups();
         Conflicts.Clear();
+        SidecarAheadRows.Clear();
+        IsSidecarAhead = false;
+        IsQueuedForEmbed = false;
     }
 
     public bool CanWriteSidecar => _writer.IsAvailable;

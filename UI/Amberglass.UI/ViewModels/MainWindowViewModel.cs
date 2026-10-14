@@ -58,6 +58,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         MetadataInspectorViewModel inspector,
         VideoPlayerViewModel player,
         BatchEditViewModel batch,
+        IEmbedQueue embedQueue,
         ILogger<MainWindowViewModel> logger)
     {
         _scanner = scanner;
@@ -92,6 +93,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             PendingChangeCount = _pending.Count;
             _ = Inspector.LoadAsync(SelectedItem);
         };
+
+        // Sync empties the queue from a background thread as it goes.
+        EmbedQueuedCount = embedQueue.Count;
+        embedQueue.Changed += (_, _) => Dispatcher.UIThread.Post(() => EmbedQueuedCount = embedQueue.Count);
 
         _pending.Changed += (_, e) =>
         {
@@ -1877,11 +1882,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPendingChanges))]
+    [NotifyPropertyChangedFor(nameof(HasSyncWork))]
+    [NotifyPropertyChangedFor(nameof(HasQueuedEmbedsOnly))]
     [NotifyPropertyChangedFor(nameof(WriteAllPrompt))]
     [NotifyPropertyChangedFor(nameof(DiscardAllPrompt))]
     private int _pendingChangeCount;
 
     public bool HasPendingChanges => PendingChangeCount > 0;
+
+    /// <summary>Files queued from the inspector to have their sidecar's values embedded.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSyncWork))]
+    [NotifyPropertyChangedFor(nameof(HasQueuedEmbedsOnly))]
+    private int _embedQueuedCount;
+
+    /// <summary>Anything for Sync to do: the status bar keeps its way in visible while there is.</summary>
+    public bool HasSyncWork => HasPendingChanges || EmbedQueuedCount > 0;
+
+    /// <summary>Queued embeds with no edits beside them, when the bar has nothing else to say.</summary>
+    public bool HasQueuedEmbedsOnly => !HasPendingChanges && EmbedQueuedCount > 0;
 
     [ObservableProperty]
     private bool _isWritingAll;

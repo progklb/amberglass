@@ -1,27 +1,108 @@
 using System.Collections.ObjectModel;
 using Amberglass.Core.Interfaces;
 using Amberglass.Core.Models;
+using Amberglass.Core.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 
 namespace Amberglass.UI.ViewModels;
 
+/// <summary>
+/// One file in the Sync window: what it will say afterwards, and where Sync will write it.
+///
+/// Laid out like a file in the Changes review on purpose, so the two windows read the same way.
+/// The difference is the action, which depends on the options and is refreshed as they change.
+/// </summary>
+public sealed partial class SyncFileViewModel : ObservableObject
+{
+    public SyncFileViewModel(SyncPlanItem plan, MediaItemViewModel item, string folder, SyncOptions options)
+    {
+        Plan = plan;
+        Item = item;
+        Folder = folder;
+        Diff = MetadataDiff.Between(plan.Before, plan.Edited);
+        Rows = DiffRows.From(Diff);
+        Refresh(options);
+    }
+
+    public SyncPlanItem Plan { get; }
+
+    /// <summary>For the thumbnail, which the tile's own control knows how to fetch lazily.</summary>
+    public MediaItemViewModel Item { get; }
+
+    public string Name => Plan.File.FileName;
+
+    public string Folder { get; }
+
+    public MetadataDiff Diff { get; }
+
+    public IReadOnlyList<object> Rows { get; }
+
+    public string Summary => Diff.IsEmpty ? "no field changes" : Diff.Summary;
+
+    public bool HasConflict => Plan.HasConflict;
+
+    /// <summary>
+    /// What the left column holds. For an edit it is where the edit started; for a file queued only
+    /// to be embedded it is the file itself, and saying so is the point of the comparison.
+    /// </summary>
+    public string BeforeHeading => Plan.HasEdit ? "BEFORE" : "IN THE FILE NOW";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActionLabel))]
+    [NotifyPropertyChangedFor(nameof(ActionDescription))]
+    private SyncAction _action;
+
+    /// <summary>The short tag on the list row.</summary>
+    public string ActionLabel => Action switch
+    {
+        SyncAction.SidecarAndFile => "Sidecar + file",
+        SyncAction.FileOnly => "File only",
+        _ => "Sidecar only"
+    };
+
+    /// <summary>The same, in a sentence, above the comparison.</summary>
+    public string ActionDescription => Action switch
+    {
+        SyncAction.SidecarAndFile => "Writes the XMP sidecar, and the same values into the file itself.",
+        SyncAction.FileOnly => "Writes the sidecar's values into the file itself. The sidecar already has them and is left as it is.",
+        _ when !MediaTypeRegistry.CanEmbedMetadata(Plan.File.FullPath)
+            => "Writes the XMP sidecar. This is a camera raw file, so the sidecar is its record and the file itself is never written to.",
+        _ => "Writes the XMP sidecar. The file itself is not modified."
+    };
+
+    public void Refresh(SyncOptions options) => Action = Plan.ActionFor(options);
+}
+
 public sealed partial class SyncViewModel : ObservableObject
 {
     private readonly ISyncService _sync;
+    private readonly IThumbnailService _thumbnails;
     private readonly ILogger<SyncViewModel> _logger;
 
     private SyncPlan _plan = SyncPlan.Empty;
     private CancellationTokenSource? _cts;
 
-    public SyncViewModel(ISyncService sync, ILogger<SyncViewModel> logger)
+    public SyncViewModel(ISyncService sync, IThumbnailService thumbnails, ILogger<SyncViewModel> logger)
     {
         _sync = sync;
+        _thumbnails = thumbnails;
         _logger = logger;
     }
 
-    public ObservableCollection<string> Breakdown { get; } = [];
+    /// <summary>The open workspace, so paths can be shown relative to it. Set by the caller.</summary>
+    public string? WorkspacePath { get; set; }
+
+    /// <summary>Every file the run will touch, sorted by path so a folder's files sit together.</summary>
+    public ObservableCollection<SyncFileViewModel> Files { get; } = [];
+
+    [ObservableProperty]
+    private SyncFileViewModel? _selectedFile;
+
+    /// <summary>"12 files · 9 JPG · 3 RAF", the header over the list.</summary>
+    [ObservableProperty]
+    private string _heading = string.Empty;
 
     public ObservableCollection<SyncItemResult> Failures { get; } = [];
 
@@ -60,8 +141,10 @@ public sealed partial class SyncViewModel : ObservableObject
 
     // Options. Embedding is off by default: it is the only thing here that touches originals.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ActionSummary))]
     private bool _embedMetadata;
+
+    /// <summary>Each file's action follows the option, and the summary follows the files.</summary>
+    partial void OnEmbedMetadataChanged(bool value) => RefreshActions();
 
     [ObservableProperty]
     private bool _backupOriginals = true;
@@ -79,10 +162,40 @@ public sealed partial class SyncViewModel : ObservableObject
 
     public bool HasConflicts => ConflictCount > 0;
 
-    /// <summary>Says in plain words what pressing the button will do to the user's files.</summary>
-    public string ActionSummary => EmbedMetadata
-        ? "XMP sidecars will be written, and metadata will be written into the original media files."
-        : "XMP sidecars will be written. Your original media will not be modified.";
+    /// <summary>
+    /// Says in plain words what pressing the button will do to the user's files, counted from the
+    /// files themselves: with queued embeds, "your originals will not be modified" can be untrue
+    /// even with the embed option off.
+    /// </summary>
+    [ObservableProperty]
+    private string _actionSummary = string.Empty;
+
+    private void RefreshActions()
+    {
+        var options = BuildOptions();
+        foreach (var file in Files)
+        {
+            file.Refresh(options);
+        }
+
+        var sidecars = Files.Count(f => f.Action != SyncAction.FileOnly);
+        var embeds = Files.Count(f => f.Action != SyncAction.SidecarOnly);
+
+        var parts = new List<string>(2);
+        if (sidecars > 0)
+        {
+            parts.Add(sidecars == 1 ? "1 XMP sidecar will be written" : $"{sidecars:N0} XMP sidecars will be written");
+        }
+
+        if (embeds > 0)
+        {
+            parts.Add(embeds == 1 ? "1 original file will have metadata written into it" : $"{embeds:N0} original files will have metadata written into them");
+        }
+
+        ActionSummary = parts.Count == 0 ? "Nothing to do."
+            : embeds == 0 ? parts[0] + ". Your original media will not be modified."
+            : string.Join(", and ", parts) + ".";
+    }
 
     public SyncOptions BuildOptions() => new()
     {
@@ -106,11 +219,26 @@ public sealed partial class SyncViewModel : ObservableObject
             IsResuming = _plan.IsResuming;
             AlreadyCompletedCount = _plan.AlreadyCompleted.Count;
 
-            Breakdown.Clear();
-            foreach (var (extension, count) in _plan.ByExtension)
+            var keep = SelectedFile?.Plan.File.FullPath;
+            var options = BuildOptions();
+            Files.Clear();
+            foreach (var item in _plan.Items)
             {
-                Breakdown.Add($"{count:N0} {extension}");
+                Files.Add(new SyncFileViewModel(
+                    item,
+                    new MediaItemViewModel(item.File, _thumbnails),
+                    ChangesViewModel.FolderOf(item.File, WorkspacePath),
+                    options));
             }
+
+            SelectedFile = Files.FirstOrDefault(f => f.Plan.File.FullPath == keep) ?? Files.FirstOrDefault();
+
+            var types = _plan.ByExtension.Select(e => $"{e.Count:N0} {e.Extension}");
+            Heading = FileCount == 0
+                ? "Nothing to sync"
+                : string.Join(" · ", [FileCount == 1 ? "1 file" : $"{FileCount:N0} files", .. types]);
+
+            RefreshActions();
 
             OnPropertyChanged(nameof(HasWork));
             OnPropertyChanged(nameof(HasConflicts));
@@ -210,11 +338,15 @@ public sealed partial class SyncViewModel : ObservableObject
     {
         var parts = new List<string>();
 
-        if (result.Succeeded > 0)
+        var sidecarsOnly = result.Succeeded - result.Embedded;
+        if (sidecarsOnly > 0)
         {
-            parts.Add(EmbedMetadata
-                ? $"{result.Succeeded:N0} file(s) written and embedded"
-                : $"{result.Succeeded:N0} sidecar(s) written");
+            parts.Add($"{sidecarsOnly:N0} sidecar(s) written");
+        }
+
+        if (result.Embedded > 0)
+        {
+            parts.Add($"{result.Embedded:N0} file(s) embedded");
         }
 
         if (result.Skipped > 0)

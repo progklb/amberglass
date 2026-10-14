@@ -6,6 +6,12 @@ namespace Amberglass.Core.Models;
 public sealed record RawMetadataTag(string Group, string Name, string Value)
 {
     public string QualifiedName => $"{Group}:{Name}";
+
+    /// <summary>
+    /// The tag feeds a field on which the file and its sidecar disagree. Set on both sides' copies,
+    /// so the difference can be spotted in either half of the list.
+    /// </summary>
+    public bool Differs { get; init; }
 }
 
 /// <summary>

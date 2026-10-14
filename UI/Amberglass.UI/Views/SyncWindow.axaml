@@ -4,14 +4,22 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:Amberglass.UI.ViewModels"
         xmlns:core="using:Amberglass.Core.Models"
+        xmlns:controls="using:Amberglass.UI.Controls"
         mc:Ignorable="d"
         x:Class="Amberglass.UI.Views.SyncWindow"
         x:DataType="vm:SyncViewModel"
         Title="Sync"
-        Width="620" Height="680"
-        MinWidth="540" MinHeight="560"
+        Width="1100" Height="680"
+        MinWidth="900" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         Classes.handDrawn="{DynamicResource AppRingEnabled}">
+
+  <!--
+    Laid out like the Changes review: the files on the left, the selected file's before and after in
+    the middle. Sync used to show only a count and a breakdown by type, which said how many files it
+    would write and nothing about what it would write into them. The options sit in a column of
+    their own on the right, because changing them changes what happens to every file in the list.
+  -->
 
   <Window.Styles>
     <Style Selector="TextBlock.hint">
@@ -19,20 +27,50 @@
       <Setter Property="Opacity" Value="0.55" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
+    <Style Selector="TextBlock.heading">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.column">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+    <Style Selector="TextBlock.was">
+      <Setter Property="Opacity" Value="0.55" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.now">
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Padding" Value="8,6" />
+    </Style>
     <Style Selector="Border.card">
       <Setter Property="Background" Value="#12FFFFFF" />
       <Setter Property="BorderBrush" Value="#1AFFFFFF" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="Padding" Value="14" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <!-- Where Sync will write a file. Outlined like the inspector's XMP pill. -->
+    <Style Selector="Border.action">
+      <Setter Property="BorderBrush" Value="#55FFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.action > TextBlock">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Opacity" Value="0.8" />
     </Style>
   </Window.Styles>
 
   <DockPanel>
 
-    <!-- Footer -->
-    <Border DockPanel.Dock="Bottom" Padding="14,12" BorderThickness="0,1,0,0" BorderBrush="#1AFFFFFF">
-      <StackPanel Spacing="10">
+    <!-- Footer: progress and results, what will happen, and the buttons. -->
+    <Border DockPanel.Dock="Bottom" Padding="14,10" BorderThickness="0,1,0,0" BorderBrush="#1AFFFFFF">
+      <StackPanel Spacing="8">
 
         <StackPanel Spacing="6" IsVisible="{Binding IsRunning}">
           <DockPanel>
@@ -56,89 +94,68 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right"
-                    IsVisible="{Binding !IsRunning}">
-          <Button Content="Retry outstanding" Command="{Binding RetryFailedCommand}"
-                  IsVisible="{Binding HasFinished}" />
-          <Button Content="Sync" MinWidth="110" Command="{Binding StartCommand}"
-                  IsEnabled="{Binding HasWork}"
-                  Background="#3322A0F2" BorderBrush="#6622A0F2" />
-          <Button Content="Close" MinWidth="88" IsCancel="True" Click="OnClose" />
-        </StackPanel>
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8"
+                      IsVisible="{Binding !IsRunning}">
+            <Button Content="Retry outstanding" Command="{Binding RetryFailedCommand}"
+                    IsVisible="{Binding HasFinished}" />
+            <Button Content="Sync" MinWidth="110" Command="{Binding StartCommand}"
+                    IsEnabled="{Binding HasWork}"
+                    Background="#3322A0F2" BorderBrush="#6622A0F2" />
+            <Button Content="Close" MinWidth="88" IsCancel="True" Click="OnClose" />
+          </StackPanel>
+          <TextBlock Text="{Binding ActionSummary}" FontSize="12" TextWrapping="Wrap"
+                     VerticalAlignment="Center" Margin="0,0,16,0"
+                     IsVisible="{Binding HasWork}" />
+        </DockPanel>
       </StackPanel>
     </Border>
 
-    <ScrollViewer>
-      <StackPanel Margin="14,14" Spacing="12">
+    <!-- Options, and the notices that qualify them. -->
+    <Border DockPanel.Dock="Right" Width="290" BorderThickness="1,0,0,0" BorderBrush="#1AFFFFFF">
+      <ScrollViewer>
+        <StackPanel Margin="12" Spacing="12">
 
-        <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsPreparing}" />
+          <Border Classes="card" Background="#2622A0F2" BorderBrush="#6622A0F2"
+                  IsVisible="{Binding IsResuming}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Resuming a previous run" FontWeight="SemiBold" FontSize="12" />
+              <TextBlock Classes="hint"
+                         Text="{Binding AlreadyCompletedCount, StringFormat='{}{0:N0} file(s) were already committed by an interrupted sync and will be skipped.'}" />
+              <Button Content="Start over instead" FontSize="11" Padding="8,2" HorizontalAlignment="Left"
+                      Command="{Binding DiscardResumeStateCommand}" />
+            </StackPanel>
+          </Border>
 
-        <!-- Summary -->
-        <Border Classes="card">
-          <StackPanel Spacing="8">
-            <TextBlock Text="Changes pending" FontWeight="SemiBold" FontSize="13" />
-            <TextBlock FontSize="22" Text="{Binding FileCount, StringFormat='{}{0:N0} file(s)'}" />
+          <Border Classes="card" Background="#26FF7043" BorderBrush="#66FF7043"
+                  IsVisible="{Binding HasConflicts}">
+            <StackPanel Spacing="6">
+              <TextBlock FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap"
+                         Text="{Binding ConflictCount, StringFormat='⚠ {0:N0} file(s) have conflicting metadata'}" />
+              <TextBlock Classes="hint"
+                         Text="These files' own values disagree with their XMP sidecars. They are marked in the list. Settle them in the inspector or the review, or let Sync skip them." />
+              <CheckBox Content="Skip conflicted files" IsChecked="{Binding SkipConflicted}" />
+            </StackPanel>
+          </Border>
 
-            <ItemsControl ItemsSource="{Binding Breakdown}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="x:String">
-                  <Border Background="#1AFFFFFF" CornerRadius="4" Padding="8,3" Margin="0,0,6,4">
-                    <TextBlock Text="{Binding}" FontSize="12" />
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-            <TextBlock Classes="hint" IsVisible="{Binding !HasWork}"
-                       Text="Nothing to sync — edit some metadata first." />
-          </StackPanel>
-        </Border>
-
-        <!-- Resume notice -->
-        <Border Classes="card" Background="#2622A0F2" BorderBrush="#6622A0F2"
-                IsVisible="{Binding IsResuming}">
-          <StackPanel Spacing="6">
-            <TextBlock Text="Resuming a previous run" FontWeight="SemiBold" FontSize="12" />
-            <TextBlock Classes="hint"
-                       Text="{Binding AlreadyCompletedCount, StringFormat='{}{0:N0} file(s) were already committed by an interrupted sync and will be skipped.'}" />
-            <Button Content="Start over instead" FontSize="11" Padding="8,2" HorizontalAlignment="Left"
-                    Command="{Binding DiscardResumeStateCommand}" />
-          </StackPanel>
-        </Border>
-
-        <!-- Conflicts -->
-        <Border Classes="card" Background="#26FF7043" BorderBrush="#66FF7043"
-                IsVisible="{Binding HasConflicts}">
-          <StackPanel Spacing="6">
-            <TextBlock FontWeight="SemiBold" FontSize="12"
-                       Text="{Binding ConflictCount, StringFormat='⚠ {0:N0} file(s) have conflicting metadata'}" />
-            <TextBlock Classes="hint"
-                       Text="The values in these files disagree with the values in their XMP sidecars. Settle it in the inspector or the review, or let Sync skip them." />
-            <CheckBox Content="Skip conflicted files" IsChecked="{Binding SkipConflicted}" />
-          </StackPanel>
-        </Border>
-
-        <!-- Options -->
-        <Border Classes="card">
           <StackPanel Spacing="10">
-            <TextBlock Text="Options" FontWeight="SemiBold" FontSize="13" />
+            <TextBlock Text="Options" Classes="heading" />
 
             <StackPanel Spacing="4">
-              <CheckBox Content="Embed metadata into the original files" IsChecked="{Binding EmbedMetadata}" />
+              <CheckBox IsChecked="{Binding EmbedMetadata}">
+                <TextBlock Text="Embed metadata into the original files" TextWrapping="Wrap" />
+              </CheckBox>
               <TextBlock Classes="hint" Margin="24,0,0,0"
-                         Text="Off by default. Everything Amberglass does otherwise leaves your originals byte-for-byte untouched; this is the one setting that changes them. Turn it on when another application needs the metadata inside the file." />
+                         Text="Off by default: this is the one setting that changes your originals. Files you asked to embed from the inspector are embedded either way. Camera raw files never are." />
             </StackPanel>
 
-            <StackPanel Spacing="4" IsEnabled="{Binding EmbedMetadata}">
+            <StackPanel Spacing="4">
               <CheckBox Content="Back up originals" IsChecked="{Binding BackupOriginals}" />
               <TextBlock Classes="hint" Margin="24,0,0,0"
-                         Text="Keeps a copy as &lt;name&gt;.&lt;ext&gt;_original next to each file." />
+                         Text="Keeps a copy as &lt;name&gt;.&lt;ext&gt;_original next to each file that is embedded into." />
             </StackPanel>
 
-            <StackPanel Spacing="4" IsEnabled="{Binding EmbedMetadata}">
+            <StackPanel Spacing="4">
               <CheckBox Content="Preserve file timestamps" IsChecked="{Binding PreserveTimestamps}" />
               <TextBlock Classes="hint" Margin="24,0,0,0"
                          Text="Leaves the modification date alone, so writing metadata does not make every file look freshly edited." />
@@ -150,17 +167,142 @@
                          Text="Reads each file back and confirms it says what was asked for." />
             </StackPanel>
           </StackPanel>
-        </Border>
 
-        <!-- What will happen -->
-        <Border Classes="card">
-          <StackPanel Spacing="4">
-            <TextBlock Text="What will happen" FontWeight="SemiBold" FontSize="12" />
-            <TextBlock Text="{Binding ActionSummary}" FontSize="12" TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <Panel>
+      <ProgressBar IsIndeterminate="True" Height="3" VerticalAlignment="Top"
+                   IsVisible="{Binding IsPreparing}" />
+
+      <TextBlock Text="Nothing to sync. Edits made in the inspector or the batch editor appear here, and so do files you ask to embed from the inspector."
+                 Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                 MaxWidth="360" TextAlignment="Center"
+                 IsVisible="{Binding !HasWork}" />
+
+      <Grid ColumnDefinitions="320,4,*" IsVisible="{Binding HasWork}">
+
+        <!-- The files. -->
+        <DockPanel Grid.Column="0">
+          <Border DockPanel.Dock="Top" Padding="12,10,12,8">
+            <TextBlock Text="{Binding Heading}" Classes="heading" TextWrapping="Wrap" />
+          </Border>
+
+          <ListBox ItemsSource="{Binding Files}"
+                   SelectedItem="{Binding SelectedFile}"
+                   Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:SyncFileViewModel">
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Width="44" Height="44" Margin="0,0,10,0"
+                          Background="#18FFFFFF" CornerRadius="3">
+                    <controls:LazyThumbnail DataContext="{Binding Item}"
+                                            Source="{Binding Thumbnail}"
+                                            Stretch="Uniform" Margin="2" />
+                  </Border>
+                  <StackPanel Spacing="1" VerticalAlignment="Center">
+                    <DockPanel>
+                      <Border DockPanel.Dock="Right" Classes="action" Margin="6,0,0,0">
+                        <TextBlock Text="{Binding ActionLabel}" />
+                      </Border>
+                      <TextBlock Text="{Binding Name}" FontSize="12"
+                                 TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                    <TextBlock Text="{Binding Folder}" Classes="hint"
+                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <TextBlock Text="⚠" FontSize="11" Foreground="#FF7043"
+                                 IsVisible="{Binding HasConflict}"
+                                 ToolTip.Tip="This file and its XMP sidecar disagree" />
+                      <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="#5CB8F5"
+                                 TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+
+        <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="#22FFFFFF" />
+
+        <!-- The selected file: where it will be written, and what it will say. -->
+        <ScrollViewer Grid.Column="2" Padding="16,10,16,16">
+          <StackPanel Spacing="12" DataContext="{Binding SelectedFile}"
+                      x:DataType="vm:SyncFileViewModel">
+
+            <DockPanel>
+              <Border DockPanel.Dock="Left" Width="96" Height="96" Margin="0,0,14,0"
+                      Background="#18FFFFFF" CornerRadius="3">
+                <controls:LazyThumbnail DataContext="{Binding Item}"
+                                        Source="{Binding Thumbnail}"
+                                        Stretch="Uniform" Margin="3" />
+              </Border>
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Folder}" Classes="hint" />
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                  <Border Classes="action">
+                    <TextBlock Text="{Binding ActionLabel}" />
+                  </Border>
+                  <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="#5CB8F5"
+                             VerticalAlignment="Center" />
+                </StackPanel>
+              </StackPanel>
+            </DockPanel>
+
+            <TextBlock Text="{Binding ActionDescription}" FontSize="12" TextWrapping="Wrap" />
+
+            <TextBlock FontSize="11" Foreground="#FF7043" TextWrapping="Wrap"
+                       IsVisible="{Binding HasConflict}"
+                       Text="⚠ This file's own values disagree with its sidecar. It is skipped while “Skip conflicted files” is on." />
+
+            <Grid ColumnDefinitions="110,*,*" Margin="0,6,0,0">
+              <TextBlock Grid.Column="0" Text="FIELD" Classes="column" />
+              <TextBlock Grid.Column="1" Text="{Binding BeforeHeading}" Classes="column" />
+              <TextBlock Grid.Column="2" Text="AFTER SYNC" Classes="column" />
+            </Grid>
+
+            <ItemsControl ItemsSource="{Binding Rows}">
+              <ItemsControl.DataTemplates>
+
+                <DataTemplate DataType="vm:FieldRow">
+                  <Border Padding="0,7" BorderThickness="0,0,0,1" BorderBrush="#14FFFFFF">
+                    <Grid ColumnDefinitions="110,*,*">
+                      <TextBlock Grid.Column="0" Text="{Binding Field}" FontSize="12" Opacity="0.7" />
+                      <TextBlock Grid.Column="1" Text="{Binding WasText}" Classes="was" FontSize="12"
+                                 Margin="0,0,12,0" />
+                      <TextBlock Grid.Column="2" Text="{Binding NowText}" Classes="now" FontSize="12" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+
+                <!-- As in the review: added in the right column, removed in the left. -->
+                <DataTemplate DataType="vm:KeywordRow">
+                  <Border Padding="0,5" BorderThickness="0,0,0,1" BorderBrush="#14FFFFFF">
+                    <Grid ColumnDefinitions="110,*,*">
+                      <TextBlock Grid.Column="0" Text="Keyword" FontSize="12" Opacity="0.7" />
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                  IsVisible="{Binding !Added}">
+                        <TextBlock Text="−" FontSize="12" Foreground="#E8574A" />
+                        <TextBlock Text="{Binding Keyword}" Classes="was" FontSize="12" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                  IsVisible="{Binding Added}">
+                        <TextBlock Text="+" FontSize="12" Foreground="#6ABF52" />
+                        <TextBlock Text="{Binding Keyword}" Classes="now" FontSize="12" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+
+              </ItemsControl.DataTemplates>
+            </ItemsControl>
+
           </StackPanel>
-        </Border>
-
-      </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+      </Grid>
+    </Panel>
   </DockPanel>
 </Window>

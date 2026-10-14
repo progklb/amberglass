@@ -7,6 +7,10 @@ namespace Amberglass.Core.Services;
 /// <summary>
 /// Commits pending metadata changes to disk — the one operation that may modify original media.
 ///
+/// Two kinds of work arrive here: edits not yet written anywhere, from the pending-change store, and
+/// files whose sidecar is ahead of the file, from the embed queue. A file can be in both, and is
+/// then one item that does both.
+///
 /// The order of business is deliberate: plan first, show the user, then write. Each file is
 /// journalled the moment it succeeds, so an interrupted run resumes rather than starting over.
 /// </summary>
@@ -16,6 +20,7 @@ public sealed class SyncService : ISyncService
     private readonly IMetadataProvider _metadata;
     private readonly IMetadataWriter _writer;
     private readonly SyncJournal _journal;
+    private readonly IEmbedQueue _embedQueue;
     private readonly ILogger<SyncService> _logger;
 
     public SyncService(
@@ -23,47 +28,82 @@ public sealed class SyncService : ISyncService
         IMetadataProvider metadata,
         IMetadataWriter writer,
         IAppPaths paths,
-        ILogger<SyncService> logger)
+        ILogger<SyncService> logger,
+        IEmbedQueue? embedQueue = null)
     {
         _pending = pending;
         _metadata = metadata;
         _writer = writer;
         _logger = logger;
         _journal = new SyncJournal(paths, logger);
+        _embedQueue = embedQueue ?? new EmbedQueue();
     }
 
     public async Task<SyncPlan> PrepareAsync(SyncOptions options, CancellationToken cancellationToken = default)
     {
-        var changes = _pending.GetAll();
-        if (changes.Count == 0)
+        var changes = _pending.GetAll().ToDictionary(c => c.FilePath, StringComparer.Ordinal);
+        var queued = _embedQueue.GetAll().ToHashSet(StringComparer.Ordinal);
+        if (changes.Count == 0 && queued.Count == 0)
         {
             return SyncPlan.Empty;
         }
 
         var completed = _journal.LoadCompleted().ToHashSet(StringComparer.Ordinal);
 
-        var files = changes
-            .Where(c => !completed.Contains(c.FilePath))
-            .Select(c => (Change: c, File: TryDescribe(c.FilePath)))
+        var files = changes.Keys
+            .Union(queued, StringComparer.Ordinal)
+            .Where(path => !completed.Contains(path))
+            .Select(path => (Path: path, File: TryDescribe(path)))
             .Where(x => x.File is not null)
             .ToList();
 
-        // Conflicts are read up front so the summary can warn before anything is written, rather
-        // than discovering mid-run that half the selection disagreed with its sidecar.
+        // Read up front, for two reasons: conflicts warn before anything is written rather than
+        // half way through, and a file queued only for embedding has its values in its sidecar.
         var metadata = await _metadata
             .ReadManyAsync(files.Select(f => f.File!).ToList(), null, cancellationToken)
             .ConfigureAwait(false);
 
         var items = new List<SyncPlanItem>();
-        foreach (var (change, file) in files)
+        foreach (var (path, file) in files)
         {
-            var hasConflict = metadata.TryGetValue(change.FilePath, out var current) &&
-                              MetadataConflictDetector.Detect(current, file!.FullPath).Length > 0;
+            metadata.TryGetValue(path, out var current);
+            var hasConflict = current is not null && MetadataConflictDetector.Detect(current, file!.FullPath).Length > 0;
+            var embedRequested = queued.Contains(path);
 
-            items.Add(new SyncPlanItem(file!, change.Edited, hasConflict));
+            if (changes.TryGetValue(path, out var change))
+            {
+                items.Add(new SyncPlanItem(file!, change.Edited, hasConflict)
+                {
+                    Before = change.Original,
+                    EmbedRequested = embedRequested
+                });
+                continue;
+            }
+
+            // Queued for embedding only. A request that no longer has anything to do — the file
+            // has caught up, or cannot be written into — is dropped rather than left to linger.
+            if (current is null)
+            {
+                continue;
+            }
+
+            if (!MediaTypeRegistry.CanEmbedMetadata(path) || MetadataDiff.SidecarOverFile(current).IsEmpty)
+            {
+                _embedQueue.Remove(path);
+                continue;
+            }
+
+            items.Add(new SyncPlanItem(file!, current.Effective, hasConflict)
+            {
+                Before = current.Embedded,
+                HasEdit = false,
+                EmbedRequested = true
+            });
         }
 
-        var resumable = completed.Where(p => changes.Any(c => c.FilePath == p)).ToList();
+        items.Sort(static (a, b) => string.Compare(a.File.FullPath, b.File.FullPath, StringComparison.OrdinalIgnoreCase));
+
+        var resumable = completed.Where(p => changes.ContainsKey(p) || queued.Contains(p)).ToList();
         return new SyncPlan(items, resumable);
     }
 
@@ -104,8 +144,13 @@ public sealed class SyncService : ISyncService
                 {
                     _journal.RecordCompleted(item.File.FullPath);
 
-                    // The file on disk now matches, so it is no longer a pending change.
+                    // The file on disk now matches, so it is no longer a pending change, and a
+                    // request to embed it has been met.
                     _pending.Discard(item.File.FullPath);
+                    if (result.Outcome == SyncOutcome.Embedded)
+                    {
+                        _embedQueue.Remove(item.File.FullPath);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -136,29 +181,30 @@ public sealed class SyncService : ISyncService
 
     private async Task<SyncItemResult> SyncOneAsync(SyncPlanItem item, SyncOptions options, CancellationToken cancellationToken)
     {
-        // The sidecar is always written: it stays the portable representation even when the
-        // metadata is also embedded, so the two never drift apart after a sync.
-        var sidecar = await _writer.WriteSidecarAsync(
-            item.File,
-            item.Edited,
-            new SidecarWriteOptions { ValidateAfterWrite = options.ValidateAfterWriting },
-            cancellationToken).ConfigureAwait(false);
+        // A proprietary raw file is never embedded whatever the options say — ActionFor sees to
+        // that. Its format is undocumented and differs by camera maker, and nothing in the industry
+        // writes into one: Lightroom, Camera Raw and Bridge all keep user metadata beside it. The
+        // sidecar is the record for that file, so stopping there is success, not a failure.
+        var action = item.ActionFor(options);
 
-        if (!sidecar.Success)
+        // Every edit goes to the sidecar, embedded or not: it stays the portable representation, so
+        // the two never drift apart after a sync. A file queued only for embedding already has
+        // these values in its sidecar, and rewriting it would only bump its date.
+        if (action != SyncAction.FileOnly)
         {
-            return new SyncItemResult(item.File.FullPath, SyncOutcome.Failed, sidecar.Error);
+            var sidecar = await _writer.WriteSidecarAsync(
+                item.File,
+                item.Edited,
+                new SidecarWriteOptions { ValidateAfterWrite = options.ValidateAfterWriting },
+                cancellationToken).ConfigureAwait(false);
+
+            if (!sidecar.Success)
+            {
+                return new SyncItemResult(item.File.FullPath, SyncOutcome.Failed, sidecar.Error);
+            }
         }
 
-        if (!options.EmbedMetadata)
-        {
-            return new SyncItemResult(item.File.FullPath, SyncOutcome.SidecarWritten);
-        }
-
-        // A proprietary raw file is left alone whatever the options say. Its format is undocumented
-        // and differs by camera maker, and nothing in the industry writes into one — Lightroom,
-        // Camera Raw and Bridge all keep user metadata beside it instead. The sidecar written above
-        // is the record for this file, so there is nothing further to do and nothing has failed.
-        if (!MediaTypeRegistry.CanEmbedMetadata(item.File.FullPath))
+        if (action == SyncAction.SidecarOnly)
         {
             return new SyncItemResult(item.File.FullPath, SyncOutcome.SidecarWritten);
         }

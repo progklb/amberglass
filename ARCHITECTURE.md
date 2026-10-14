@@ -126,8 +126,10 @@ testable.
   so unsynced work survives a crash.
 - **Batch editing** — `BatchMetadataService` applies one edit across a selection, reading baselines
   through the provider's batched path.
-- **Sync** — `SyncService` builds a `SyncPlan` from the store (flagging conflicts), shows it, then
-  writes. `SyncJournal` records each completed file so an interrupted sync resumes.
+- **Sync** — `SyncService` builds a `SyncPlan` from the store and the `EmbedQueue` (files whose
+  sidecar is ahead of the file, queued from the inspector to be embedded), flags conflicts, shows
+  each file's before and after, then writes. `SyncJournal` records each completed file so an
+  interrupted sync resumes.
   `MetadataConflictDetector` and `MetadataDiff` decide what genuinely differs between a file and
   its sidecar.
 - **Search parsing** — `SearchQueryParser` turns typed queries (`keyword:motorcycle`, `k:…`,
@@ -215,7 +217,7 @@ An Avalonia desktop app following MVVM with CommunityToolkit source generators.
   count and background indexing. Panels are resizable and collapsible, with sizes persisted in
   `LayoutSettings`.
 - **Other windows** — `MediaViewerWindow` (full-screen viewer), `SettingsWindow`,
-  `ChangesWindow` (review / discard pending edits), `SyncWindow` (plan, conflicts, progress),
+  `ChangesWindow` (review / discard pending edits), `SyncWindow` (each file's action and before/after, options, progress),
   `PrepareWorkspaceWindow` (cache warm-up estimate and run), `ImportPreviewWindow` (preview of a
   keyword/label import before applying).
 - **Custom controls** (`Controls/`) — `VirtualizingWrapPanel` (only realises visible tiles, so
@@ -250,6 +252,7 @@ dotnet test
 | Keyword / label library       | JSON alongside settings             | No           |
 | Pending-change journal        | app data folder                     | **No** — unsynced work |
 | Sync journal                  | app data folder                     | Resume state only |
+| Embed queue                   | `embed-queue.txt` in app data       | No — re-queue from the inspector |
 | Catalog                       | `catalog.db` (location overridable) | Yes, by re-indexing |
 | Thumbnails                    | `Cache/Thumbnails`                  | Yes          |
 | RAW renditions                | `Cache/Renders`                     | Yes          |

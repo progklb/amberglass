@@ -81,7 +81,7 @@ public class MetadataInspectorViewModelTests
     }
 
     private static (MetadataInspectorViewModel Inspector, PendingChangeStore Store, StubMetadataWriter Writer)
-        Create(MediaMetadata? metadata, KeywordLibrary? library = null)
+        Create(MediaMetadata? metadata, KeywordLibrary? library = null, EmbedQueue? queue = null)
     {
         var store = new PendingChangeStore();
         var writer = new StubMetadataWriter();
@@ -92,9 +92,79 @@ public class MetadataInspectorViewModelTests
             new StubKeywordLibrary(library ?? KeywordLibrary.Empty),
             new StubSettings(AppSettings.Default),
             new KeywordClipboard(),
-            NullLogger<MetadataInspectorViewModel>.Instance);
+            NullLogger<MetadataInspectorViewModel>.Instance,
+            queue);
 
         return (inspector, store, writer);
+    }
+
+    // ---- The sidecar ahead of the file ----------------------------------------------------------
+
+    private static readonly MediaMetadata RatedInSidecarOnly = new()
+    {
+        Embedded = new EditableMetadata { Rating = 0 },
+        Sidecar = new EditableMetadata { Rating = 4 },
+        SidecarPath = "/library/IMG001.xmp"
+    };
+
+    [Fact]
+    public async Task A_jpeg_whose_sidecar_has_more_says_what_the_file_lacks()
+    {
+        var (inspector, _, _) = Create(RatedInSidecarOnly);
+
+        await inspector.LoadAsync(Item());
+
+        Assert.True(inspector.ShowSidecarAhead);
+        var row = Assert.IsType<FieldRow>(Assert.Single(inspector.SidecarAheadRows));
+        Assert.Equal(("Rating", "Unrated", "4 stars"), (row.Field, row.Was, row.Now));
+    }
+
+    /// <summary>For camera raw the sidecar is the record by design; a callout would never go away.</summary>
+    [Fact]
+    public async Task Camera_raw_never_says_its_sidecar_is_ahead()
+    {
+        var (inspector, _, _) = Create(RatedInSidecarOnly);
+
+        await inspector.LoadAsync(new MediaItemViewModel(
+            new MediaFile
+            {
+                FullPath = "/library/DSCF0001.RAF",
+                FileName = "DSCF0001.RAF",
+                MediaType = MediaType.Image,
+                SizeBytes = 1,
+                ModifiedUtc = DateTimeOffset.UnixEpoch,
+                CreatedUtc = DateTimeOffset.UnixEpoch
+            },
+            new StubThumbnailService()));
+
+        Assert.False(inspector.ShowSidecarAhead);
+    }
+
+    [Fact]
+    public async Task Embedding_queues_the_file_and_asks_for_Sync()
+    {
+        var queue = new EmbedQueue();
+        var (inspector, _, _) = Create(RatedInSidecarOnly, queue: queue);
+        var opened = 0;
+        inspector.OpenSyncRequested += () => opened++;
+        await inspector.LoadAsync(Item());
+
+        inspector.EmbedIntoFileCommand.Execute(null);
+
+        Assert.True(queue.Contains(FilePath));
+        Assert.Equal(1, opened);
+    }
+
+    [Fact]
+    public async Task A_queued_file_says_so_when_it_is_selected()
+    {
+        var queue = new EmbedQueue();
+        queue.Add(FilePath);
+        var (inspector, _, _) = Create(RatedInSidecarOnly, queue: queue);
+
+        await inspector.LoadAsync(Item());
+
+        Assert.True(inspector.IsQueuedForEmbed);
     }
 
     /// <summary>Settings held in memory, so a test can flip the keyword restriction.</summary>

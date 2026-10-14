@@ -13,8 +13,8 @@ namespace Amberglass.Core.Interfaces;
 public interface ISyncService
 {
     /// <summary>
-    /// Builds the plan from the pending-change store, flagging conflicts and noting any work a
-    /// previous interrupted run already finished.
+    /// Builds the plan from the pending-change store and the embed queue, flagging conflicts and
+    /// noting any work a previous interrupted run already finished.
     /// </summary>
     Task<SyncPlan> PrepareAsync(SyncOptions options, CancellationToken cancellationToken = default);
 

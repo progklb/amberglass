@@ -40,6 +40,22 @@
       <Setter Property="Height" Value="26" />
       <Setter Property="Padding" Value="10,0" />
     </Style>
+    <!--
+      A row in All tags. One behind a field the file and its sidecar disagree on gets a bar down its
+      left edge, in both halves, so the two values can be found and compared without reading the
+      whole list. The inset is there on every row so marking one does not shift its text.
+    -->
+    <Style Selector="Border.tag">
+      <Setter Property="Margin" Value="0,2" />
+      <Setter Property="Padding" Value="6,0,0,0" />
+      <Setter Property="BorderThickness" Value="2,0,0,0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.tag.differs">
+      <Setter Property="BorderBrush" Value="#5CB8F5" />
+      <Setter Property="ToolTip.Tip" Value="The file and its sidecar disagree on this" />
+    </Style>
+
     <Style Selector="TextBlock.label">
       <Setter Property="FontSize" Value="11" />
       <Setter Property="Opacity" Value="0.55" />
@@ -175,6 +191,65 @@
         settled before any of the fields below it are touched, and it is rare enough not to jar.
       -->
       <StackPanel DockPanel.Dock="Bottom" Margin="8,6,8,8" Spacing="6">
+        <!--
+          The sidecar is ahead of the file: the normal state of a JPEG or video once its sidecar is
+          written, so information rather than a warning — neutral, and down here with the other
+          save actions rather than at the top with the conflicts. It names what an application that
+          ignores sidecars would miss, and offers to put it in the file through Sync.
+        -->
+        <Border IsVisible="{Binding ShowSidecarAhead}"
+                Background="#14FFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1"
+                CornerRadius="4" Padding="8,6">
+          <StackPanel Spacing="6">
+            <TextBlock Text="ⓘ The sidecar is ahead of the file" FontWeight="SemiBold" FontSize="12" />
+
+            <ItemsControl ItemsSource="{Binding SidecarAheadRows}">
+              <ItemsControl.DataTemplates>
+                <DataTemplate DataType="vm:FieldRow">
+                  <Grid ColumnDefinitions="72,*" Margin="0,1">
+                    <TextBlock Text="{Binding Field}" FontSize="11" Opacity="0.7" />
+                    <TextBlock Grid.Column="1" FontSize="11" TextWrapping="Wrap">
+                      <Run Text="{Binding WasText}" />
+                      <Run Text=" → " />
+                      <Run Text="{Binding NowText}" Foreground="#5CB8F5" />
+                    </TextBlock>
+                  </Grid>
+                </DataTemplate>
+                <DataTemplate DataType="vm:KeywordRow">
+                  <Grid ColumnDefinitions="72,*" Margin="0,1">
+                    <TextBlock Text="Keyword" FontSize="11" Opacity="0.7" />
+                    <TextBlock Grid.Column="1" FontSize="11" TextWrapping="Wrap">
+                      <Run Text="{Binding Sign}" />
+                      <Run Text="{Binding Keyword}" />
+                    </TextBlock>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.DataTemplates>
+            </ItemsControl>
+
+            <StackPanel Spacing="6" IsVisible="{Binding !IsQueuedForEmbed}">
+              <TextBlock Text="Apps that don't read sidecars still see the file's own values. Embedding writes the sidecar's values into the file during Sync."
+                         FontSize="10" Opacity="0.55" TextWrapping="Wrap" />
+              <Button Content="Embed into file…" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center"
+                      ToolTip.Tip="Queue this file for Sync and open it, so you can see the change before anything is written"
+                      Command="{Binding EmbedIntoFileCommand}" />
+            </StackPanel>
+
+            <StackPanel Spacing="6" IsVisible="{Binding IsQueuedForEmbed}">
+              <TextBlock Text="Queued — these values will be written into the file at the next Sync."
+                         FontSize="11" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="Open Sync…" FontSize="11" Padding="8,2"
+                        Command="{Binding OpenSyncCommand}" />
+                <Button Content="Don't embed" FontSize="11" Padding="8,2"
+                        ToolTip.Tip="Take this file off the Sync queue. Its sidecar is unaffected."
+                        Command="{Binding CancelEmbedCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
         <Border IsVisible="{Binding HasPendingChanges}"
                 Background="#2622A0F2" BorderBrush="#6622A0F2" BorderThickness="1"
                 CornerRadius="4" Padding="8,6">
@@ -673,10 +748,12 @@
                           <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="core:RawMetadataTag">
                               <!-- Name alone, not Group:Name: the section header already said the group. -->
-                              <StackPanel Margin="0,2">
-                                <TextBlock Text="{Binding Name}" FontSize="11" Opacity="0.6" />
-                                <TextBlock Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
-                              </StackPanel>
+                              <Border Classes="tag" Classes.differs="{Binding Differs}">
+                                <StackPanel>
+                                  <TextBlock Text="{Binding Name}" FontSize="11" Opacity="0.6" />
+                                  <TextBlock Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
+                                </StackPanel>
+                              </Border>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>

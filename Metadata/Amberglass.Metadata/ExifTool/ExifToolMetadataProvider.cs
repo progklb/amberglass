@@ -149,18 +149,59 @@ public sealed class ExifToolMetadataProvider : IMetadataProvider
         Dictionary<string, JsonElement> media,
         Dictionary<string, JsonElement>? sidecar,
         string? sidecarPath)
-        => new()
+    {
+        var metadata = new MediaMetadata
         {
             Embedded = ReadEditable(media),
             Sidecar = sidecar is null ? null : ReadEditable(sidecar),
             Camera = ReadCamera(media),
             Video = file.MediaType == MediaType.Video ? ReadVideo(media) : VideoInfo.Empty,
             Dimensions = ReadDimensions(media),
-            RawTags = ReadRawTags(media, sidecar),
             SidecarPath = sidecar is null ? null : sidecarPath,
             FileMetadataChangedUtc = MetadataChangedAt(media, file.FullPath),
             SidecarMetadataChangedUtc = sidecar is null ? null : MetadataChangedAt(sidecar, sidecarPath)
         };
+
+        // After the editable fields, because which tags to mark follows from which fields differ.
+        return metadata with { RawTags = ReadRawTags(media, sidecar, DifferingTags(metadata)) };
+    }
+
+    /// <summary>
+    /// The tags each editable field is read from, as <see cref="ReadEditable"/> reads them. Kept
+    /// beside it so the two lists are changed together.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> TagsByField = new(StringComparer.Ordinal)
+    {
+        [MetadataConflictDetector.TitleField] = ["XMP:Title", "IPTC:ObjectName", "QuickTime:Title"],
+        [MetadataConflictDetector.DescriptionField] = ["XMP:Description", "IPTC:Caption-Abstract", "EXIF:ImageDescription", "QuickTime:Description"],
+        [MetadataConflictDetector.HeadlineField] = ["XMP:Headline", "IPTC:Headline"],
+        [MetadataConflictDetector.LabelField] = ["XMP:Label"],
+        [MetadataConflictDetector.CreatorField] = ["XMP:Creator", "IPTC:By-line", "EXIF:Artist", "QuickTime:Artist"],
+        [MetadataConflictDetector.CopyrightField] = ["XMP:Rights", "IPTC:CopyrightNotice", "EXIF:Copyright"],
+        [MetadataConflictDetector.RatingField] = ["XMP:Rating"],
+        [MetadataDiff.FlagField] = ["XMP:PickLabel", "XMP:Tagged", "XMP:Good"],
+        [MetadataConflictDetector.KeywordsField] = ["XMP:Subject", "IPTC:Keywords", "XMP:HierarchicalSubject"]
+    };
+
+    /// <summary>
+    /// The tags behind every field on which the sidecar and the file disagree, by their name
+    /// without any "Sidecar:" prefix. Only the editable fields are compared: the two documents
+    /// differ on dozens of tags that mean nothing to anyone — file sizes, dates, tool versions —
+    /// and marking those would bury the few that do.
+    /// </summary>
+    private static HashSet<string> DifferingTags(MediaMetadata metadata)
+    {
+        var diff = MetadataDiff.SidecarOverFile(metadata);
+        var fields = diff.Fields.Select(f => f.Field).ToList();
+        if (diff.HasKeywordChanges)
+        {
+            fields.Add(MetadataConflictDetector.KeywordsField);
+        }
+
+        return fields
+            .SelectMany(field => TagsByField.TryGetValue(field, out var tags) ? tags : [])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// When this document's metadata last changed.
@@ -434,7 +475,8 @@ public sealed class ExifToolMetadataProvider : IMetadataProvider
     /// </summary>
     private static ImmutableArray<RawMetadataTag> ReadRawTags(
         Dictionary<string, JsonElement> media,
-        Dictionary<string, JsonElement>? sidecar)
+        Dictionary<string, JsonElement>? sidecar,
+        HashSet<string> differing)
     {
         var tags = new List<RawMetadataTag>();
         Collect(media, null);
@@ -475,7 +517,7 @@ public sealed class ExifToolMetadataProvider : IMetadataProvider
                 var text = Stringify(value);
                 if (!string.IsNullOrEmpty(text))
                 {
-                    tags.Add(new RawMetadataTag(group, name, text));
+                    tags.Add(new RawMetadataTag(group, name, text) { Differs = differing.Contains(key) });
                 }
             }
         }

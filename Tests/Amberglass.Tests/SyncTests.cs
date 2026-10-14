@@ -132,8 +132,11 @@ public class SyncServiceTests
             Reader = new ExifToolMetadataProvider(Host, NullLogger<ExifToolMetadataProvider>.Instance);
             Writer = new ExifToolSidecarWriter(Host, Reader, NullLogger<ExifToolSidecarWriter>.Instance);
             Store = new PendingChangeStore();
-            Service = new SyncService(Store, Reader, Writer, Paths, NullLogger<SyncService>.Instance);
+            Queue = new EmbedQueue();
+            Service = new SyncService(Store, Reader, Writer, Paths, NullLogger<SyncService>.Instance, Queue);
         }
+
+        public EmbedQueue Queue { get; }
 
         public TempFolder Temp { get; }
 
@@ -204,6 +207,61 @@ public class SyncServiceTests
         Assert.Equal(before, HashOf(file.FullPath));
         Assert.Equal(modifiedBefore, File.GetLastWriteTimeUtc(file.FullPath));
         Assert.True(File.Exists(Path.ChangeExtension(file.FullPath, ".xmp")));
+    }
+
+    /// <summary>
+    /// The case the embed queue exists for: a sidecar already written, a file behind it, and the
+    /// global option off. The file is embedded because it was asked for; its sidecar, which already
+    /// says all of it, is left alone; and the request is used up.
+    /// </summary>
+    [Fact]
+    public async Task A_queued_file_is_embedded_from_its_sidecar_with_the_option_off()
+    {
+        if (!RealExifTool.IsAvailable)
+        {
+            return;
+        }
+
+        await using var fixture = new Fixture();
+        var file = fixture.CreateJpeg("IMG010.jpg");
+        var written = await fixture.Writer.WriteSidecarAsync(file, new EditableMetadata { Rating = 4 }, new SidecarWriteOptions());
+        Assert.True(written.Success);
+        var sidecarBefore = HashOf(written.SidecarPath!);
+
+        fixture.Queue.Add(file.FullPath);
+
+        var options = new SyncOptions { EmbedMetadata = false };
+        var plan = await fixture.Service.PrepareAsync(options);
+        var item = Assert.Single(plan.Items);
+        Assert.Equal(SyncAction.FileOnly, item.ActionFor(options));
+
+        var result = await fixture.Service.ExecuteAsync(plan, options);
+
+        Assert.Equal(SyncOutcome.Embedded, Assert.Single(result.Items).Outcome);
+        Assert.Equal(sidecarBefore, HashOf(written.SidecarPath!));
+        Assert.Equal(0, fixture.Queue.Count);
+
+        var reread = await fixture.Reader.ReadAsync(MediaFile.FromFileInfo(new FileInfo(file.FullPath)));
+        Assert.Equal(4, reread!.Embedded.Rating);
+    }
+
+    /// <summary>A request with nothing left to do is dropped at planning rather than kept forever.</summary>
+    [Fact]
+    public async Task A_queued_file_that_has_caught_up_leaves_the_queue()
+    {
+        if (!RealExifTool.IsAvailable)
+        {
+            return;
+        }
+
+        await using var fixture = new Fixture();
+        var file = fixture.CreateJpeg("IMG011.jpg");
+        fixture.Queue.Add(file.FullPath);
+
+        var plan = await fixture.Service.PrepareAsync(new SyncOptions());
+
+        Assert.Empty(plan.Items);
+        Assert.Equal(0, fixture.Queue.Count);
     }
 
     [Fact]

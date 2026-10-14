@@ -30,6 +30,19 @@ public sealed record SyncOptions
     public bool SkipConflicted { get; init; } = true;
 }
 
+/// <summary>What a sync run will do to one file.</summary>
+public enum SyncAction
+{
+    /// <summary>Write the XMP sidecar; the file itself is not opened for writing.</summary>
+    SidecarOnly,
+
+    /// <summary>Write the sidecar and embed the same values into the file.</summary>
+    SidecarAndFile,
+
+    /// <summary>The sidecar already says it; copy its values into the file.</summary>
+    FileOnly
+}
+
 /// <summary>One file queued for sync, with everything needed to decide whether to include it.</summary>
 public sealed record SyncPlanItem(
     MediaFile File,
@@ -37,6 +50,30 @@ public sealed record SyncPlanItem(
     bool HasConflict)
 {
     public string Extension => Path.GetExtension(File.FullPath).TrimStart('.').ToUpperInvariant();
+
+    /// <summary>
+    /// What the values were before: the pending edit's starting point, or for a file queued only to
+    /// be embedded, what the file itself says now. The other side of the review's before and after.
+    /// </summary>
+    public EditableMetadata Before { get; init; } = EditableMetadata.Empty;
+
+    /// <summary>False for a file queued only to be embedded: nothing new is going to its sidecar.</summary>
+    public bool HasEdit { get; init; } = true;
+
+    /// <summary>
+    /// The user asked for this file to be embedded, from the inspector. Wins over the global option,
+    /// which is a default for files nobody has said anything about.
+    /// </summary>
+    public bool EmbedRequested { get; init; }
+
+    public SyncAction ActionFor(SyncOptions options)
+    {
+        var embed = MediaTypeRegistry.CanEmbedMetadata(File.FullPath) && (options.EmbedMetadata || EmbedRequested);
+
+        return !HasEdit ? SyncAction.FileOnly
+            : embed ? SyncAction.SidecarAndFile
+            : SyncAction.SidecarOnly;
+    }
 }
 
 /// <summary>
@@ -77,6 +114,8 @@ public sealed record SyncItemResult(string FilePath, SyncOutcome Outcome, string
 public sealed record SyncResult(IReadOnlyList<SyncItemResult> Items, bool WasCancelled)
 {
     public int Succeeded => Items.Count(i => i.Outcome is SyncOutcome.SidecarWritten or SyncOutcome.Embedded);
+
+    public int Embedded => Items.Count(i => i.Outcome == SyncOutcome.Embedded);
 
     public int Skipped => Items.Count(i => i.Outcome == SyncOutcome.Skipped);
 

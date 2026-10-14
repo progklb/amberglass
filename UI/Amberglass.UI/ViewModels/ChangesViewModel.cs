@@ -24,6 +24,20 @@ public sealed record KeywordRow(string Keyword, bool Added)
     public string Sign => Added ? "+" : "−";
 }
 
+/// <summary>The rows a diff is shown as, wherever one is shown: the review, Sync and the inspector.</summary>
+public static class DiffRows
+{
+    /// <summary>Field rows first, then keywords added, then removed — one list, two templates.</summary>
+    public static IReadOnlyList<object> From(MetadataDiff diff)
+    {
+        var rows = new List<object>(diff.Fields.Length + diff.KeywordsAdded.Length + diff.KeywordsRemoved.Length);
+        rows.AddRange(diff.Fields.Select(f => new FieldRow(f.Field, f.Was, f.Now)));
+        rows.AddRange(diff.KeywordsAdded.Select(k => new KeywordRow(k, Added: true)));
+        rows.AddRange(diff.KeywordsRemoved.Select(k => new KeywordRow(k, Added: false)));
+        return rows;
+    }
+}
+
 /// <summary>A file with a pending change, as the Changes window lists it.</summary>
 public sealed class ChangedFileViewModel
 {
@@ -34,12 +48,7 @@ public sealed class ChangedFileViewModel
         Item = item;
         Folder = folder;
         Diff = MetadataDiff.Between(change.Original, change.Edited);
-
-        var rows = new List<object>(Diff.Fields.Length + Diff.KeywordsAdded.Length + Diff.KeywordsRemoved.Length);
-        rows.AddRange(Diff.Fields.Select(f => new FieldRow(f.Field, f.Was, f.Now)));
-        rows.AddRange(Diff.KeywordsAdded.Select(k => new KeywordRow(k, Added: true)));
-        rows.AddRange(Diff.KeywordsRemoved.Select(k => new KeywordRow(k, Added: false)));
-        Rows = rows;
+        Rows = DiffRows.From(Diff);
     }
 
     public PendingChange Change { get; }
@@ -507,11 +516,14 @@ public sealed partial class ChangesViewModel : ObservableObject
 
     // ---- Shared ---------------------------------------------------------------------------------
 
-    private string FolderOf(MediaFile file)
+    private string FolderOf(MediaFile file) => FolderOf(file, WorkspacePath);
+
+    /// <summary>Where a file sits, relative to the workspace when it is inside one. Shared with Sync.</summary>
+    public static string FolderOf(MediaFile file, string? workspacePath)
     {
         var folder = System.IO.Path.GetDirectoryName(file.FullPath) ?? string.Empty;
 
-        if (WorkspacePath is { } root && folder.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        if (workspacePath is { } root && folder.StartsWith(root, StringComparison.OrdinalIgnoreCase))
         {
             var relative = folder[root.Length..].TrimStart(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
             return relative.Length == 0 ? "workspace" : relative;

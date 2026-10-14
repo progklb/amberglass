@@ -115,6 +115,33 @@ public sealed record MetadataDiff
     }
 
     /// <summary>
+    /// What the sidecar says that the file itself does not: the file's own values on one side, the
+    /// values in use (the sidecar laid over the file) on the other. Empty without a sidecar.
+    ///
+    /// This is what embedding would change, and what an application that ignores sidecars is
+    /// missing. Fields the sidecar is silent on fall through to the file's own value, so they never
+    /// show up as a difference.
+    /// </summary>
+    public static MetadataDiff SidecarOverFile(MediaMetadata metadata)
+    {
+        if (metadata.Sidecar is null)
+        {
+            return Empty;
+        }
+
+        var file = metadata.Embedded;
+        var inUse = metadata.Effective;
+
+        // A sidecar saying "unrated" to a file that says nothing is the same answer twice.
+        if (file.Rating is null && inUse.Rating == 0)
+        {
+            inUse = inUse with { Rating = null };
+        }
+
+        return Between(file, inUse);
+    }
+
+    /// <summary>
     /// A rating as words rather than as a number that could be mistaken for a count. Zero is
     /// "Unrated" — a file can carry an explicit zero, which is not the same as carrying nothing.
     /// </summary>

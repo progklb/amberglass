@@ -181,6 +181,40 @@ public class ExifToolMetadataProviderTests
         Assert.Equal(["Sidecar:XMP", "EXIF", "XMP"], metadata!.RawTags.Select(t => t.Group).ToArray());
     }
 
+    /// <summary>
+    /// Both copies of a tag whose field the file and sidecar disagree on are marked, so the two
+    /// values can be found in either half of All tags. Tags outside the editable fields are not,
+    /// however much they differ.
+    /// </summary>
+    [Fact]
+    public async Task Tags_behind_a_disagreeing_field_are_marked_on_both_sides()
+    {
+        if (!FakeExifTool.IsSupported)
+        {
+            return;
+        }
+
+        using var temp = new TempFolder();
+        var imagePath = temp.CreateFile("IMG006.jpg");
+        var sidecarPath = temp.CreateFile("IMG006.xmp");
+
+        var json = $$"""
+            [
+              {"SourceFile": "{{imagePath}}", "XMP:Rating": 0, "XMP:Title": "Same", "File:FileSize": "2 MB"},
+              {"SourceFile": "{{sidecarPath}}", "XMP:Rating": 4, "XMP:Title": "Same", "File:FileSize": "3 kB"}
+            ]
+            """;
+
+        using var fake = new FakeExifTool(json);
+        await using var host = CreateHost(fake);
+        var provider = CreateProvider(host);
+
+        var metadata = await provider.ReadAsync(MediaFileFor(imagePath));
+
+        var marked = metadata!.RawTags.Where(t => t.Differs).Select(t => t.QualifiedName).ToArray();
+        Assert.Equal(["Sidecar:XMP:Rating", "XMP:Rating"], marked);
+    }
+
     [Fact]
     public async Task Reports_no_sidecar_when_none_exists()
     {
