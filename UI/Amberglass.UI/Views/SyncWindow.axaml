@@ -254,6 +254,21 @@
 
             <TextBlock Text="{Binding ActionDescription}" FontSize="12" TextWrapping="Wrap" />
 
+            <!--
+              Two ways to change what happens to this one file: take it out of the run, or go to it
+              in the grid and change it in the inspector. Sync is modal, so the second closes it.
+            -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Show in grid" FontSize="11" Padding="8,2"
+                      ToolTip.Tip="Close Sync and select this file, so you can change it in the inspector"
+                      Command="{Binding $parent[Window].((vm:SyncViewModel)DataContext).ShowInGridCommand}"
+                      CommandParameter="{Binding}" />
+              <Button Content="{Binding DropLabel}" FontSize="11" Padding="8,2"
+                      ToolTip.Tip="{Binding DropTip}"
+                      Command="{Binding $parent[Window].((vm:SyncViewModel)DataContext).DropFileCommand}"
+                      CommandParameter="{Binding}" />
+            </StackPanel>
+
             <TextBlock FontSize="11" Foreground="#FF7043" TextWrapping="Wrap"
                        IsVisible="{Binding HasConflict}"
                        Text="⚠ This file's own values disagree with its sidecar. It is skipped while “Skip conflicted files” is on." />

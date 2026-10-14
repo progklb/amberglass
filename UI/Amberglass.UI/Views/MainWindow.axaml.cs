@@ -308,6 +308,12 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.RefreshAfterSync();
+
+            // Asked from Sync to go to a file and change it there.
+            if (sync.RevealPath is { } path)
+            {
+                await viewModel.RevealFileAsync(path);
+            }
         }
     }
 

@@ -188,6 +188,35 @@ public class ExifToolSidecarWriterTests
         Assert.Equal(3, reread.Sidecar.Rating);
     }
 
+    /// <summary>
+    /// Unsetting everything — stars, label, flag, keywords, text — and writing, with the read-back
+    /// check on as the inspector has it. Nothing left to say is still a valid sidecar.
+    /// </summary>
+    [Fact]
+    public async Task Clearing_every_field_writes_and_validates()
+    {
+        if (!RealExifTool.IsAvailable)
+        {
+            return;
+        }
+
+        await using var fixture = new Fixture();
+        var file = fixture.CreateJpeg("IMG014.jpg");
+
+        var first = await fixture.Writer.WriteSidecarAsync(
+            file,
+            new EditableMetadata { Title = "Temporary", Rating = 4, Label = "Red", Flag = MediaFlag.Accepted, Keywords = ["a", "b"] },
+            new SidecarWriteOptions { ValidateAfterWrite = true });
+        Assert.True(first.Success, first.Error);
+
+        var cleared = await fixture.Writer.WriteSidecarAsync(
+            file,
+            EditableMetadata.Empty,
+            new SidecarWriteOptions { ValidateAfterWrite = true });
+
+        Assert.True(cleared.Success, cleared.Error);
+    }
+
     [Fact]
     public async Task Removed_keywords_disappear_rather_than_accumulating()
     {

@@ -65,7 +65,7 @@
       <Setter Property="TextWrapping" Value="Wrap" />
       <Setter Property="Margin" Value="0,0,0,2" />
     </Style>
-    <Style Selector="Button.star">
+    <Style Selector="Button.ratingStar">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="2,0" />
@@ -305,15 +305,15 @@
               <StackPanel IsVisible="{Binding ShowRating}">
               <TextBlock Text="Rating" Classes="label" />
               <StackPanel Orientation="Horizontal">
-                <Button Classes="star" Content="{Binding Rating, Converter={StaticResource StarGlyph}, ConverterParameter=1}"
+                <Button Classes="ratingStar" Classes.filled="{Binding Rating, Converter={StaticResource StarFilled}, ConverterParameter=1}"
                         Command="{Binding SetRatingCommand}" CommandParameter="1" />
-                <Button Classes="star" Content="{Binding Rating, Converter={StaticResource StarGlyph}, ConverterParameter=2}"
+                <Button Classes="ratingStar" Classes.filled="{Binding Rating, Converter={StaticResource StarFilled}, ConverterParameter=2}"
                         Command="{Binding SetRatingCommand}" CommandParameter="2" />
-                <Button Classes="star" Content="{Binding Rating, Converter={StaticResource StarGlyph}, ConverterParameter=3}"
+                <Button Classes="ratingStar" Classes.filled="{Binding Rating, Converter={StaticResource StarFilled}, ConverterParameter=3}"
                         Command="{Binding SetRatingCommand}" CommandParameter="3" />
-                <Button Classes="star" Content="{Binding Rating, Converter={StaticResource StarGlyph}, ConverterParameter=4}"
+                <Button Classes="ratingStar" Classes.filled="{Binding Rating, Converter={StaticResource StarFilled}, ConverterParameter=4}"
                         Command="{Binding SetRatingCommand}" CommandParameter="4" />
-                <Button Classes="star" Content="{Binding Rating, Converter={StaticResource StarGlyph}, ConverterParameter=5}"
+                <Button Classes="ratingStar" Classes.filled="{Binding Rating, Converter={StaticResource StarFilled}, ConverterParameter=5}"
                         Command="{Binding SetRatingCommand}" CommandParameter="5" />
               </StackPanel>
               </StackPanel>

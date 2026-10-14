@@ -18,6 +18,8 @@ public sealed class ExifToolSession : IAsyncDisposable
 {
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(60);
 
+    private static readonly System.Text.RegularExpressions.Regex StaleMarker = new(@"\{ready\d+\}$");
+
     private readonly string _exifToolPath;
     private readonly ILogger _logger;
     private readonly SemaphoreSlim _mutex = new(1, 1);
@@ -42,12 +44,21 @@ public sealed class ExifToolSession : IAsyncDisposable
         await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var process = EnsureStarted();
             var sequence = ++_sequence;
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(RequestTimeout);
+            // The caller's token is honoured only before the request starts. Once the first line is
+            // written ExifTool will answer, whatever the caller does now: stopping part way through
+            // the arguments would glue the rest of them to the next request, and stopping while it
+            // answers would leave the answer in the pipe for the next request to read as its own.
+            // That was happening every time the inspector moved to another file mid-read — the next
+            // file's metadata arrived as two JSON documents end to end, failed to parse, and the
+            // panel showed nothing. Only the timeout may interrupt, and it restarts the process.
+            using var timeout = new CancellationTokenSource(RequestTimeout);
 
+            string reply;
             try
             {
                 foreach (var argument in arguments)
@@ -58,9 +69,9 @@ public sealed class ExifToolSession : IAsyncDisposable
                 await process.StandardInput.WriteLineAsync($"-execute{sequence}".AsMemory(), timeout.Token).ConfigureAwait(false);
                 await process.StandardInput.FlushAsync(timeout.Token).ConfigureAwait(false);
 
-                return await ReadUntilReadyAsync(process, sequence, timeout.Token).ConfigureAwait(false);
+                reply = await ReadUntilReadyAsync(process, sequence, timeout.Token).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            catch (Exception ex)
             {
                 // The protocol is stateful: a timeout or broken pipe leaves the stream out of step
                 // with the sequence numbers, so the process is discarded rather than reused.
@@ -68,6 +79,11 @@ public sealed class ExifToolSession : IAsyncDisposable
                 KillProcess();
                 throw;
             }
+
+            // The answer was read to its end, so the session is in step; the caller just no longer
+            // wants it.
+            cancellationToken.ThrowIfCancellationRequested();
+            return reply;
         }
         finally
         {
@@ -156,6 +172,15 @@ public sealed class ExifToolSession : IAsyncDisposable
                 }
 
                 return output.ToString();
+            }
+
+            // Another request's marker means everything read so far was that request's answer, not
+            // this one's. ExecuteAsync no longer leaves answers behind, but if one ever is, it is
+            // dropped here rather than handed back glued to the real answer.
+            if (StaleMarker.IsMatch(trimmed))
+            {
+                output.Clear();
+                continue;
             }
 
             output.AppendLine(line);

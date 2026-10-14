@@ -22,6 +22,30 @@ public class ExifToolSessionTests
         Assert.Contains("hello from exiftool", output);
     }
 
+    /// <summary>
+    /// The inspector gives up on a read whenever the selection moves on. ExifTool answers anyway, and
+    /// that answer must not be what the next request gets back: it used to arrive glued in front of
+    /// the real one, as two JSON documents end to end, and the next file showed no metadata at all.
+    /// </summary>
+    [Fact]
+    public async Task A_request_given_up_mid_answer_does_not_leak_into_the_next()
+    {
+        if (!FakeExifTool.IsSupported)
+        {
+            return; // The /bin/sh stub cannot run on Windows.
+        }
+
+        using var fake = new FakeExifTool("[{\"SourceFile\": \"a.jpg\"}]", answerDelay: 0.4);
+        await using var session = new ExifToolSession(fake.Path_, NullLogger.Instance);
+
+        using var giveUp = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ExecuteAsync(["-json", "a.jpg"], giveUp.Token));
+
+        var next = await session.ExecuteAsync(["-json", "a.jpg"]);
+
+        Assert.Equal("[{\"SourceFile\": \"a.jpg\"}]", next.Trim());
+    }
+
     [Fact]
     public async Task Output_excludes_the_ready_marker()
     {

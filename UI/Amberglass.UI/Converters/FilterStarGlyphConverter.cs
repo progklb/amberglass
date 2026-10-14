@@ -7,7 +7,7 @@ namespace Amberglass.UI.Converters;
 /// <summary>
 /// The glyph for one star in the filter popup.
 ///
-/// Separate from <see cref="StarGlyphConverter"/>, which draws a rating being <i>edited</i> and is
+/// Separate from <see cref="StarFilledConverter"/>, which draws a rating being <i>edited</i> and is
 /// always "this many stars". A filter has a second state — exactly this many, rather than this many
 /// and up — and the two have to look different, so this one needs both the count and the mode. That
 /// is why it is a multi-value converter rather than a parameter on the existing one.

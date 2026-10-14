@@ -1416,6 +1416,12 @@
                 </MultiBinding>
               </TextBlock.Text>
             </TextBlock>
+            <!-- A stack's files share one sidecar by name; without this a rating set here quietly showed on the other file too. -->
+            <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                       DataContext="{Binding SelectedItem}" x:DataType="vm:MediaItemViewModel"
+                       Text="{Binding StackNote}"
+                       IsVisible="{Binding StackNote, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       ToolTip.Tip="Edits here belong to the file shown. Files in a stack that share its sidecar read the same values, so a rating or keyword set here shows on them too. Only the file shown is ever embedded into, and camera raw files never are." />
           </StackPanel>
         </Border>
 

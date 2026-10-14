@@ -2501,6 +2501,36 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Selects a file in the grid, wherever it is. On screen already, it is simply selected — or the
+    /// tile it is stacked behind, which is the one the grid draws. Otherwise the catalog is searched
+    /// for its name, which also brings its stack partner along.
+    /// </summary>
+    public async Task RevealFileAsync(string path)
+    {
+        if (Find() is null)
+        {
+            SearchText = Path.GetFileNameWithoutExtension(path);
+            await SearchAsync();
+        }
+
+        if (Find() is not { } item)
+        {
+            StatusText = $"Could not find {Path.GetFileName(path)} in this workspace.";
+            return;
+        }
+
+        SelectedItem = VisibleItems.Contains(item)
+            ? item
+            : MediaStacking.KeyOf(item.File) is { } key && _faces.TryGetValue(key, out var slot)
+                ? VisibleItems[slot]
+                : item;
+
+        ScrollSelectionIntoView?.Invoke(SelectedItem);
+
+        MediaItemViewModel? Find() => MediaItems.FirstOrDefault(i => string.Equals(i.File.FullPath, path, StringComparison.Ordinal));
+    }
+
     [RelayCommand]
     private void ClearSearch()
     {

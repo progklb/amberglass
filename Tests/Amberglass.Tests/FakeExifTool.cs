@@ -21,7 +21,8 @@ internal sealed class FakeExifTool : IDisposable
     /// Real ExifTool ends its output with a newline, so the ready marker gets its own line. Setting
     /// this false reproduces the marker sharing a line with the payload.
     /// </param>
-    public FakeExifTool(string responseBody, string? countInvocationsTo = null, bool terminateBodyWithNewline = true)
+    /// <param name="answerDelay">How long to wait before answering, so a caller can give up mid-request.</param>
+    public FakeExifTool(string responseBody, string? countInvocationsTo = null, bool terminateBodyWithNewline = true, double answerDelay = 0)
     {
         Directory = _folder.Path;
         var scriptPath = Path.Combine(Directory, "exiftool");
@@ -45,7 +46,7 @@ internal sealed class FakeExifTool : IDisposable
             __STARTUP__while IFS= read -r line; do
               case "$line" in
                 -execute*)
-                  cat __RESPONSE__
+                  __DELAY__cat __RESPONSE__
                   echo "{ready${line#-execute}}"
                   ;;
                 False)
@@ -58,7 +59,10 @@ internal sealed class FakeExifTool : IDisposable
 
         var script = template
             .Replace("__STARTUP__", startupCounter)
-            .Replace("__RESPONSE__", Shell(responsePath));
+            .Replace("__RESPONSE__", Shell(responsePath))
+            .Replace("__DELAY__", answerDelay > 0
+                ? $"sleep {answerDelay.ToString(System.Globalization.CultureInfo.InvariantCulture)}\n                  "
+                : string.Empty);
 
         File.WriteAllText(scriptPath, script.ReplaceLineEndings("\n"));
         MakeExecutable(scriptPath);

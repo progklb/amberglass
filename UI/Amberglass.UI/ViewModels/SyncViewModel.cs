@@ -49,6 +49,13 @@ public sealed partial class SyncFileViewModel : ObservableObject
     /// </summary>
     public string BeforeHeading => Plan.HasEdit ? "BEFORE" : "IN THE FILE NOW";
 
+    /// <summary>Taking the file out of the run means different things for the two kinds of work.</summary>
+    public string DropLabel => Plan.HasEdit ? "Discard changes" : "Don't embed";
+
+    public string DropTip => Plan.HasEdit
+        ? "Forget this file's unsaved edits. Nothing on disk changes — nothing was written yet."
+        : "Take this file off the embed queue. Its sidecar is unaffected.";
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActionLabel))]
     [NotifyPropertyChangedFor(nameof(ActionDescription))]
@@ -84,11 +91,73 @@ public sealed partial class SyncViewModel : ObservableObject
     private SyncPlan _plan = SyncPlan.Empty;
     private CancellationTokenSource? _cts;
 
-    public SyncViewModel(ISyncService sync, IThumbnailService thumbnails, ILogger<SyncViewModel> logger)
+    private readonly IPendingChangeStore _pending;
+    private readonly IEmbedQueue _embedQueue;
+
+    public SyncViewModel(
+        ISyncService sync,
+        IThumbnailService thumbnails,
+        IPendingChangeStore pending,
+        IEmbedQueue embedQueue,
+        ILogger<SyncViewModel> logger)
     {
         _sync = sync;
         _thumbnails = thumbnails;
+        _pending = pending;
+        _embedQueue = embedQueue;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// A file the user wants to see in the grid, set when they ask to. The main window selects it
+    /// once this window has closed — the window is modal, so the inspector cannot be used until then.
+    /// </summary>
+    public string? RevealPath { get; private set; }
+
+    /// <summary>Raised when the window should close on the view model's behalf.</summary>
+    public event Action? CloseRequested;
+
+    /// <summary>
+    /// Closes Sync and selects the file in the main window, so it can be changed in the inspector.
+    /// Nothing is lost: the plan is rebuilt the next time Sync opens.
+    /// </summary>
+    [RelayCommand]
+    private void ShowInGrid(SyncFileViewModel? file)
+    {
+        if (file is null || IsRunning)
+        {
+            return;
+        }
+
+        RevealPath = file.Plan.File.FullPath;
+        CloseRequested?.Invoke();
+    }
+
+    /// <summary>
+    /// Takes one file out of the run: an edit is discarded, as the review's Discard does, and a file
+    /// queued only to be embedded leaves the queue. No confirmation, for the review's reason — nothing
+    /// on disk changes, and the button says what it does.
+    /// </summary>
+    [RelayCommand]
+    private void DropFile(SyncFileViewModel? file)
+    {
+        if (file is null || IsRunning)
+        {
+            return;
+        }
+
+        var path = file.Plan.File.FullPath;
+        if (file.Plan.HasEdit)
+        {
+            _pending.Discard(path);
+        }
+
+        _embedQueue.Remove(path);
+
+        var index = Files.IndexOf(file);
+        _plan = _plan with { Items = _plan.Items.Where(i => i.File.FullPath != path).ToList() };
+        ShowPlan();
+        SelectedFile = Files.Count == 0 ? null : Files[Math.Clamp(index, 0, Files.Count - 1)];
     }
 
     /// <summary>The open workspace, so paths can be shown relative to it. Set by the caller.</summary>
@@ -213,35 +282,7 @@ public sealed partial class SyncViewModel : ObservableObject
         try
         {
             _plan = await _sync.PrepareAsync(BuildOptions()).ConfigureAwait(true);
-
-            FileCount = _plan.Count;
-            ConflictCount = _plan.ConflictCount;
-            IsResuming = _plan.IsResuming;
-            AlreadyCompletedCount = _plan.AlreadyCompleted.Count;
-
-            var keep = SelectedFile?.Plan.File.FullPath;
-            var options = BuildOptions();
-            Files.Clear();
-            foreach (var item in _plan.Items)
-            {
-                Files.Add(new SyncFileViewModel(
-                    item,
-                    new MediaItemViewModel(item.File, _thumbnails),
-                    ChangesViewModel.FolderOf(item.File, WorkspacePath),
-                    options));
-            }
-
-            SelectedFile = Files.FirstOrDefault(f => f.Plan.File.FullPath == keep) ?? Files.FirstOrDefault();
-
-            var types = _plan.ByExtension.Select(e => $"{e.Count:N0} {e.Extension}");
-            Heading = FileCount == 0
-                ? "Nothing to sync"
-                : string.Join(" · ", [FileCount == 1 ? "1 file" : $"{FileCount:N0} files", .. types]);
-
-            RefreshActions();
-
-            OnPropertyChanged(nameof(HasWork));
-            OnPropertyChanged(nameof(HasConflicts));
+            ShowPlan();
         }
         catch (Exception ex)
         {
@@ -253,6 +294,39 @@ public sealed partial class SyncViewModel : ObservableObject
         {
             IsPreparing = false;
         }
+    }
+
+    /// <summary>Lays the plan out: the list, the counts and the heading over it.</summary>
+    private void ShowPlan()
+    {
+        FileCount = _plan.Count;
+        ConflictCount = _plan.ConflictCount;
+        IsResuming = _plan.IsResuming;
+        AlreadyCompletedCount = _plan.AlreadyCompleted.Count;
+
+        var keep = SelectedFile?.Plan.File.FullPath;
+        var options = BuildOptions();
+        Files.Clear();
+        foreach (var item in _plan.Items)
+        {
+            Files.Add(new SyncFileViewModel(
+                item,
+                new MediaItemViewModel(item.File, _thumbnails),
+                ChangesViewModel.FolderOf(item.File, WorkspacePath),
+                options));
+        }
+
+        SelectedFile = Files.FirstOrDefault(f => f.Plan.File.FullPath == keep) ?? Files.FirstOrDefault();
+
+        var types = _plan.ByExtension.Select(e => $"{e.Count:N0} {e.Extension}");
+        Heading = FileCount == 0
+            ? "Nothing to sync"
+            : string.Join(" · ", [FileCount == 1 ? "1 file" : $"{FileCount:N0} files", .. types]);
+
+        RefreshActions();
+
+        OnPropertyChanged(nameof(HasWork));
+        OnPropertyChanged(nameof(HasConflicts));
     }
 
     [RelayCommand]

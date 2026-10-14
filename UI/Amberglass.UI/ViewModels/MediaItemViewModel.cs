@@ -2,6 +2,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Amberglass.Core.Interfaces;
 using Amberglass.Core.Models;
+using Amberglass.Core.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Amberglass.UI.ViewModels;
@@ -137,7 +138,36 @@ public sealed partial class MediaItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsStacked))]
     [NotifyPropertyChangedFor(nameof(StackBadge))]
     [NotifyPropertyChangedFor(nameof(StackTip))]
+    [NotifyPropertyChangedFor(nameof(StackNote))]
     private IReadOnlyList<MediaFile> _stacked = [];
+
+    /// <summary>
+    /// Where an edit to a stacked tile goes, for the inspector header. Edits belong to the file on
+    /// the face, but its sidecar is named by the photograph, not the format — DSCF7054.RAF and
+    /// DSCF7054.JPG both read DSCF7054.xmp — so a rating set on one shows on the other. That was
+    /// true and invisible; this says so. Null for a tile that is not a stack.
+    /// </summary>
+    public string? StackNote
+    {
+        get
+        {
+            if (Stacked.Count == 0)
+            {
+                return null;
+            }
+
+            var sidecar = SidecarOf(File.FullPath);
+            var sharing = Stacked.Where(f => string.Equals(SidecarOf(f.FullPath), sidecar, StringComparison.OrdinalIgnoreCase))
+                .Select(f => f.FileName)
+                .ToList();
+
+            return sharing.Count == 0
+                ? $"Saved to {Path.GetFileName(sidecar)}, for this file only"
+                : $"Saved to {Path.GetFileName(sidecar)}, shared with {string.Join(", ", sharing)}";
+
+            static string SidecarOf(string path) => XmpSidecar.Find(path) ?? XmpSidecar.GetPreferredPath(path);
+        }
+    }
 
     public bool IsStacked => Stacked.Count > 0;
 

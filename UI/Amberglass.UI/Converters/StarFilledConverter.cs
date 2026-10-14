@@ -4,10 +4,11 @@ using Avalonia.Data.Converters;
 namespace Amberglass.UI.Converters;
 
 /// <summary>
-/// Renders one star of the rating strip: filled when the current rating reaches this star's
-/// position, hollow otherwise. The position arrives as the ConverterParameter.
+/// Whether one star of a rating strip is filled: true when the rating reaches this star's position,
+/// which arrives as the ConverterParameter. Drives the star's <c>filled</c> class, so the star is
+/// one shape that is either filled or outlined — never two glyphs that might come from two fonts.
 /// </summary>
-public sealed class StarGlyphConverter : IValueConverter
+public sealed class StarFilledConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
@@ -20,7 +21,7 @@ public sealed class StarGlyphConverter : IValueConverter
             _ => 0
         };
 
-        return rating >= position ? "★" : "☆";
+        return position > 0 && rating >= position;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

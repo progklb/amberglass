@@ -14,7 +14,16 @@ public partial class SyncWindow : Window
         {
             if (DataContext is SyncViewModel viewModel)
             {
+                viewModel.CloseRequested += Close;
                 await viewModel.PrepareAsync();
+            }
+        };
+
+        Closed += (_, _) =>
+        {
+            if (DataContext is SyncViewModel viewModel)
+            {
+                viewModel.CloseRequested -= Close;
             }
         };
     }
