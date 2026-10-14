@@ -428,8 +428,9 @@ public sealed class ExifToolMetadataProvider : IMetadataProvider
     }
 
     /// <summary>
-    /// Every tag, for the advanced raw view. Sidecar tags are included and marked so a power user
-    /// can see which layer a value actually came from.
+    /// Every tag, for the inspector's All tags view. Sidecar tags are included and marked so a power
+    /// user can see which layer a value actually came from, and they sort first: the sidecar is the
+    /// layer this app writes, so it is the one most worth finding without scrolling.
     /// </summary>
     private static ImmutableArray<RawMetadataTag> ReadRawTags(
         Dictionary<string, JsonElement> media,
@@ -440,9 +441,13 @@ public sealed class ExifToolMetadataProvider : IMetadataProvider
         Collect(sidecar, "Sidecar");
 
         return tags
-            .OrderBy(t => t.Group, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => IsFromSidecar(t) ? 0 : 1)
+            .ThenBy(t => t.Group, StringComparer.OrdinalIgnoreCase)
             .ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
             .ToImmutableArray();
+
+        static bool IsFromSidecar(RawMetadataTag tag)
+            => tag.Group.StartsWith("Sidecar:", StringComparison.Ordinal);
 
         void Collect(Dictionary<string, JsonElement>? document, string? prefix)
         {

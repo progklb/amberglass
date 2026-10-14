@@ -11,7 +11,7 @@
 
   <UserControl.Styles>
     <!--
-      Group headers in the XMP tab. The theme sizes an Expander header to be clicked once in a
+      Group headers in the All tags tab. The theme sizes an Expander header to be clicked once in a
       settings page; here there are eight of them stacked, and at that height the list of sections
       takes more room than the tags it is meant to be condensing.
 
@@ -608,8 +608,13 @@
           </ScrollViewer>
         </TabItem>
 
-        <!-- ============ Raw XMP / all tags ============ -->
-        <TabItem Header="XMP">
+        <!--
+          ============ All tags ============
+          Everything ExifTool reads from the file (EXIF, maker notes, embedded XMP, IPTC…), plus the
+          sidecar's tags grouped under "Sidecar:" when there is one. Not called "XMP": most files
+          have no sidecar and most of what is listed here never came from XMP.
+        -->
+        <TabItem Header="All tags">
           <DockPanel Margin="8,4">
             <!--
               Filter box rather than a Cmd+F overlay: it is visible, so it needs no discovering,

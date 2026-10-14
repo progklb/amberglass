@@ -342,7 +342,7 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
 
     public ObservableCollection<RawMetadataTag> RawTags { get; } = [];
 
-    // ---- Raw tag list: grouped, filterable ----------------------------------------------------
+    // ---- All tags list: grouped, filterable ----------------------------------------------------
 
     /// <summary>
     /// <see cref="RawTags"/> arranged into collapsible sections. A RAF arrives with around 200 tags
@@ -391,7 +391,7 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
         var filtering = IsFilteringRawTags;
         var matched = 0;
 
-        // RawTags arrives sorted by group then name, so grouping preserves that order.
+        // RawTags arrives sorted sidecar groups first, then by group and name, so grouping preserves that order.
         var wanted = new List<(string Name, List<RawMetadataTag> Tags, int Total)>();
         foreach (var group in RawTags.GroupBy(tag => tag.Group, StringComparer.OrdinalIgnoreCase))
         {

@@ -149,6 +149,38 @@ public class ExifToolMetadataProviderTests
         Assert.Equal(5, metadata.Sidecar!.Rating);
     }
 
+    /// <summary>
+    /// The sidecar is the layer this app writes, so its groups lead the All tags list rather than
+    /// sorting in among the file's own EXIF, File and MakerNotes groups.
+    /// </summary>
+    [Fact]
+    public async Task Sidecar_tags_are_listed_before_the_file_s_own()
+    {
+        if (!FakeExifTool.IsSupported)
+        {
+            return;
+        }
+
+        using var temp = new TempFolder();
+        var imagePath = temp.CreateFile("IMG005.jpg");
+        var sidecarPath = temp.CreateFile("IMG005.xmp");
+
+        var json = $$"""
+            [
+              {"SourceFile": "{{imagePath}}", "EXIF:Make": "Fujifilm", "XMP:Rating": 2},
+              {"SourceFile": "{{sidecarPath}}", "XMP:Rating": 5}
+            ]
+            """;
+
+        using var fake = new FakeExifTool(json);
+        await using var host = CreateHost(fake);
+        var provider = CreateProvider(host);
+
+        var metadata = await provider.ReadAsync(MediaFileFor(imagePath));
+
+        Assert.Equal(["Sidecar:XMP", "EXIF", "XMP"], metadata!.RawTags.Select(t => t.Group).ToArray());
+    }
+
     [Fact]
     public async Task Reports_no_sidecar_when_none_exists()
     {
