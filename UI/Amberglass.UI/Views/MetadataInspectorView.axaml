@@ -645,33 +645,43 @@
               <ItemsControl ItemsSource="{Binding RawTagGroups}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:RawMetadataGroupViewModel">
-                    <Expander Classes="group"
-                              IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Stretch"
-                              Margin="0,0,0,2">
-                      <Expander.Header>
-                        <!-- The count sits hard right, so the eye runs down one column of sizes. -->
-                        <DockPanel>
-                          <TextBlock Text="{Binding Summary}" DockPanel.Dock="Right"
-                                     FontSize="11" Opacity="0.45" VerticalAlignment="Center"
-                                     Margin="8,0,0,0" />
-                          <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
-                        </DockPanel>
-                      </Expander.Header>
-                      <!-- The inset the Expander's own Padding used to give, now that it is zero. -->
-                      <ItemsControl ItemsSource="{Binding Tags}" Margin="10,4,10,8">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="core:RawMetadataTag">
-                            <!-- Name alone, not Group:Name: the section header already said the group. -->
-                            <StackPanel Margin="0,2">
-                              <TextBlock Text="{Binding Name}" FontSize="11" Opacity="0.6" />
-                              <TextBlock Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
-                            </StackPanel>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                    </Expander>
+                    <!--
+                      The heading rides on the first section of each half rather than being an item
+                      of its own, so the list stays one collection of groups and the filter and the
+                      remembered open sections need not know headings exist.
+                    -->
+                    <StackPanel>
+                      <TextBlock Classes="label" Text="{Binding SectionHeading}"
+                                 Margin="2,10,0,4"
+                                 IsVisible="{Binding SectionHeading, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                      <Expander Classes="group"
+                                IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Margin="0,0,0,2">
+                        <Expander.Header>
+                          <!-- The count sits hard right, so the eye runs down one column of sizes. -->
+                          <DockPanel>
+                            <TextBlock Text="{Binding Summary}" DockPanel.Dock="Right"
+                                       FontSize="11" Opacity="0.45" VerticalAlignment="Center"
+                                       Margin="8,0,0,0" />
+                            <TextBlock Text="{Binding Label}" FontSize="12" VerticalAlignment="Center" />
+                          </DockPanel>
+                        </Expander.Header>
+                        <!-- The inset the Expander's own Padding used to give, now that it is zero. -->
+                        <ItemsControl ItemsSource="{Binding Tags}" Margin="10,4,10,8">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="core:RawMetadataTag">
+                              <!-- Name alone, not Group:Name: the section header already said the group. -->
+                              <StackPanel Margin="0,2">
+                                <TextBlock Text="{Binding Name}" FontSize="11" Opacity="0.6" />
+                                <TextBlock Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
+                              </StackPanel>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </Expander>
+                    </StackPanel>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>

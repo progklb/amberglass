@@ -407,6 +407,11 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
 
         var existing = RawTagGroups.ToDictionary(g => g.Name, StringComparer.OrdinalIgnoreCase);
 
+        // Decided from the whole file, not the filtered list, so a filter that only matches embedded
+        // tags still says they are embedded rather than dropping the heading.
+        var splitBySource = RawTags.Any(tag => tag.Group.StartsWith(RawMetadataGroupViewModel.SidecarPrefix, StringComparison.Ordinal));
+        string? previousHeading = null;
+
         _syncingGroups = true;
         try
         {
@@ -432,6 +437,10 @@ public sealed partial class MetadataInspectorViewModel : ObservableObject
                 // A filter opens whatever it matched: hits hidden inside shut sections would make
                 // the search look as though it had found nothing.
                 group.IsExpanded = filtering || _expandedGroups.Contains(name);
+
+                var heading = splitBySource ? (group.IsFromSidecar ? "Sidecar" : "Embedded") : null;
+                group.SectionHeading = heading != previousHeading ? heading : null;
+                previousHeading = heading;
 
                 RawTagGroups.Add(group);
             }

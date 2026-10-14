@@ -1217,10 +1217,10 @@ public class RawMetadataGroupingTests
         },
         new Thumbnails());
 
-    private static async Task<MetadataInspectorViewModel> LoadedAsync()
+    private static async Task<MetadataInspectorViewModel> LoadedAsync(ImmutableArray<RawMetadataTag>? tags = null)
     {
         var inspector = new MetadataInspectorViewModel(
-            new Provider(new MediaMetadata { RawTags = Tags }),
+            new Provider(new MediaMetadata { RawTags = tags ?? Tags }),
             new StubWriter(),
             new PendingChangeStore(),
             new StubLibrary(),
@@ -1285,6 +1285,40 @@ public class RawMetadataGroupingTests
 
         Assert.Equal(["EXIF", "File", "MakerNotes"], inspector.RawTagGroups.Select(g => g.Name));
         Assert.Equal(["ISO", "Make"], inspector.RawTagGroups[0].Tags.Select(t => t.Name));
+    }
+
+    /// <summary>
+    /// With a sidecar, the list splits into a "Sidecar" half and an "Embedded" half, each heading on
+    /// its first section only, and the sidecar sections drop the prefix the heading now carries.
+    /// </summary>
+    [Fact]
+    public async Task A_sidecar_splits_the_sections_under_two_headings()
+    {
+        var inspector = await LoadedAsync([new("Sidecar:XMP", "Rating", "5"), new("Sidecar:XMP", "Label", "Red"), .. Tags]);
+
+        Assert.Equal(["Sidecar", "Embedded", null, null], inspector.RawTagGroups.Select(g => g.SectionHeading));
+        Assert.Equal(["XMP", "EXIF", "File", "MakerNotes"], inspector.RawTagGroups.Select(g => g.Label));
+    }
+
+    /// <summary>Nothing to tell apart without a sidecar, so no headings at all.</summary>
+    [Fact]
+    public async Task Without_a_sidecar_there_are_no_headings()
+    {
+        var inspector = await LoadedAsync();
+
+        Assert.All(inspector.RawTagGroups, group => Assert.Null(group.SectionHeading));
+    }
+
+    /// <summary>A filter matching only the file's own tags still says they are embedded.</summary>
+    [Fact]
+    public async Task A_filter_keeps_the_heading_of_the_half_it_matched()
+    {
+        var inspector = await LoadedAsync([new("Sidecar:XMP", "Rating", "5"), .. Tags]);
+
+        inspector.RawTagFilter = "Sharpness";
+
+        var only = Assert.Single(inspector.RawTagGroups);
+        Assert.Equal("Embedded", only.SectionHeading);
     }
 
     /// <summary>Shut by default — collapsing the noise is the whole point of grouping it.</summary>
